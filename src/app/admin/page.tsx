@@ -64,12 +64,7 @@ const AdminDashboard = () => {
     }
   ];
 
-  const recentActivity = [
-    { action: 'Published news article', time: '2 hours ago', type: 'publish' },
-    { action: 'Marked article as headline', time: '4 hours ago', type: 'headline' },
-    { action: 'Updated system configuration', time: '6 hours ago', type: 'config' },
-    { action: 'Added new admin user', time: '1 day ago', type: 'user' },
-  ];
+
 
   return (
     <AdminLayout>
@@ -114,72 +109,50 @@ const AdminDashboard = () => {
           })}
         </div>
 
-        {/* Recent Activity and Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                    <p className="text-xs text-gray-500 flex items-center mt-1">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {activity.time}
-                    </p>
+        {/* Quick Actions */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+          <div className="space-y-3">
+            <a
+              href="/admin/news"
+              className="block w-full text-left px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              <div className="flex items-center">
+                <Newspaper className="w-5 h-5 mr-3" />
+                <span className="font-medium">Manage News</span>
+              </div>
+            </a>
+            {user?.role === 'superadmin' && (
+              <>
+                <a
+                  href="/admin/admins"
+                  className="block w-full text-left px-4 py-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
+                >
+                  <div className="flex items-center">
+                    <Users className="w-5 h-5 mr-3" />
+                    <span className="font-medium">Manage Admins</span>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <a
-                href="/admin/news"
-                className="block w-full text-left px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-              >
-                <div className="flex items-center">
-                  <Newspaper className="w-5 h-5 mr-3" />
-                  <span className="font-medium">Manage News</span>
-                </div>
-              </a>
-              {user?.role === 'superadmin' && (
-                <>
-                  <a
-                    href="/admin/admins"
-                    className="block w-full text-left px-4 py-3 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
-                  >
-                    <div className="flex items-center">
-                      <Users className="w-5 h-5 mr-3" />
-                      <span className="font-medium">Manage Admins</span>
-                    </div>
-                  </a>
-                  <a
-                    href="/admin/config"
-                    className="block w-full text-left px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
-                  >
-                    <div className="flex items-center">
-                      <Settings className="w-5 h-5 mr-3" />
-                      <span className="font-medium">System Config</span>
-                    </div>
-                  </a>
-                </>
-              )}
-              <a
-                href="/admin/stats"
-                className="block w-full text-left px-4 py-3 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
-              >
-                <div className="flex items-center">
-                  <TrendingUp className="w-5 h-5 mr-3" />
-                  <span className="font-medium">View Statistics</span>
-                </div>
-              </a>
-            </div>
+                </a>
+                <a
+                  href="/admin/config"
+                  className="block w-full text-left px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
+                >
+                  <div className="flex items-center">
+                    <Settings className="w-5 h-5 mr-3" />
+                    <span className="font-medium">System Config</span>
+                  </div>
+                </a>
+              </>
+            )}
+            <a
+              href="/admin/stats"
+              className="block w-full text-left px-4 py-3 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors"
+            >
+              <div className="flex items-center">
+                <TrendingUp className="w-5 h-5 mr-3" />
+                <span className="font-medium">View Statistics</span>
+              </div>
+            </a>
           </div>
         </div>
       </div>

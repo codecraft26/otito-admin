@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { mockSystemConfig } from '@/data/mockData';
+import { updateConfig, getAutoPublishStatus, toggleAutoPublishMode } from '@/data/adminApi';
 import { SystemConfig } from '@/types';
 import {
   Save,
@@ -18,14 +19,59 @@ import {
   Hash,
   ToggleLeft,
   ToggleRight,
+  Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const ConfigPage = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [config, setConfig] = useState<SystemConfig>(mockSystemConfig);
   const [isLoading, setIsLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [autoPublishLoading, setAutoPublishLoading] = useState(false);
+  const [autoPublishMode, setAutoPublishMode] = useState<boolean | null>(null);
+
+  // Load auto-publish status on component mount
+  useEffect(() => {
+    if (token && user?.role === 'superadmin') {
+      loadAutoPublishStatus();
+    }
+  }, [token, user?.role]);
+
+  const loadAutoPublishStatus = async () => {
+    if (!token) return;
+    
+    try {
+      const response = await getAutoPublishStatus(token);
+      if (response.success) {
+        setAutoPublishMode(response.autoPublishMode);
+      }
+    } catch (error) {
+      console.error('Error loading auto-publish status:', error);
+    }
+  };
+
+  const handleToggleAutoPublish = async () => {
+    if (!token || autoPublishMode === null) return;
+    
+    setAutoPublishLoading(true);
+    try {
+      const response = await toggleAutoPublishMode(token, !autoPublishMode);
+      if (response.success) {
+        setAutoPublishMode(response.autoPublishMode);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        setError(response.message || 'Failed to toggle auto-publish mode');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to toggle auto-publish mode');
+      console.error('Auto-publish toggle error:', error);
+    } finally {
+      setAutoPublishLoading(false);
+    }
+  };
 
   // Redirect if not superadmin
   if (user?.role !== 'superadmin') {
@@ -41,16 +87,37 @@ const ConfigPage = () => {
   }
 
   const handleSave = async () => {
+    if (!token) {
+      setError('Authentication required');
+      return;
+    }
+
     setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    setError('');
     
-    console.log('Saving configuration:', config);
-    setSaved(true);
-    setIsLoading(false);
-    
-    // Clear saved status after 3 seconds
-    setTimeout(() => setSaved(false), 3000);
+    try {
+      const response = await updateConfig(token, {
+        cron_interval: `*/${config.newsFrequency} * * * *`, // Convert minutes to cron format
+        hindi_prompt: config.hindiPrompt,
+        english_prompt: config.englishPrompt,
+        auto_publish: config.autoPublish,
+        max_news_per_batch: config.maxNewsPerBatch,
+        categories: config.categories,
+      });
+
+      if (response.success) {
+        setSaved(true);
+        // Clear saved status after 3 seconds
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        setError(response.message || 'Failed to save configuration');
+      }
+    } catch (error) {
+      console.error('Save config error:', error);
+      setError('Failed to save configuration. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleAddCategory = () => {
@@ -67,13 +134,6 @@ const ConfigPage = () => {
     setConfig({
       ...config,
       categories: config.categories.filter(cat => cat !== categoryToRemove)
-    });
-  };
-
-  const handleToggleAutoPublish = () => {
-    setConfig({
-      ...config,
-      autoPublish: !config.autoPublish
     });
   };
 
@@ -102,7 +162,7 @@ const ConfigPage = () => {
             >
               {isLoading ? (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Saving...
                 </>
               ) : saved ? (
@@ -119,6 +179,16 @@ const ConfigPage = () => {
             </button>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 mr-2" />
+              {error}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* AI Prompts */}
@@ -218,19 +288,22 @@ const ConfigPage = () => {
                 <div className="flex items-center space-x-3">
                   <button
                     onClick={handleToggleAutoPublish}
+                    disabled={autoPublishLoading}
                     className={clsx(
                       'flex items-center px-4 py-2 rounded-lg border transition-colors',
-                      config.autoPublish
+                      autoPublishMode
                         ? 'bg-green-50 border-green-200 text-green-700'
                         : 'bg-gray-50 border-gray-200 text-gray-700'
                     )}
                   >
-                    {config.autoPublish ? (
+                    {autoPublishLoading ? (
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    ) : autoPublishMode ? (
                       <ToggleRight className="w-5 h-5 mr-2" />
                     ) : (
                       <ToggleLeft className="w-5 h-5 mr-2" />
                     )}
-                    {config.autoPublish ? 'Enabled' : 'Disabled'}
+                    {autoPublishMode ? 'Enabled' : 'Disabled'}
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
@@ -322,7 +395,7 @@ const ConfigPage = () => {
               <div className="text-xs text-blue-700 mt-1 space-y-1">
                 <p>• News will be fetched every {config.newsFrequency} minutes</p>
                 <p>• Maximum {config.maxNewsPerBatch} articles per batch</p>
-                <p>• Auto-publish is {config.autoPublish ? 'enabled' : 'disabled'}</p>
+                <p>• Auto-publish is {autoPublishMode ? 'enabled' : 'disabled'}</p>
                 <p>• {config.categories.length} categories configured</p>
               </div>
             </div>

@@ -50,17 +50,17 @@ const NewsEditPage = () => {
     if (item) {
       setNewsItem(item);
       setFormData({
-        title: item.title,
-        twoLineSummary: item.twoLineSummary,
-        fourLineSummary: item.fourLineSummary,
-        swipeSummary: item.swipeSummary,
-        fullDescription: item.fullDescription,
-        originalDescription: item.originalDescription,
-        category: item.category,
-        tags: [...item.tags],
-        isHeadline: item.isHeadline,
-        isPublished: item.isPublished,
-        language: item.language,
+        title: item.title || '',
+        twoLineSummary: item.twoLineSummary || '',
+        fourLineSummary: item.fourLineSummary || '',
+        swipeSummary: item.swipeSummary || '',
+        fullDescription: item.fullDescription || '',
+        originalDescription: item.originalDescription || '',
+        category: Array.isArray(item.category) ? item.category.join(', ') : (item.category || ''),
+        tags: [...(item.tags || [])],
+        isHeadline: item.isHeadline || false,
+        isPublished: item.isPublished || false,
+        language: (item.language === 'HI' ? 'hindi' : item.language === 'EN' ? 'english' : item.language) || 'english',
         imageUrl: item.imageUrl || '',
         sourceUrl: item.sourceUrl || '',
       });

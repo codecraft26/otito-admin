@@ -4,6 +4,7 @@ import { useState } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { mockAdmins } from '@/data/mockData';
+import { createAdmin, updateAdmin } from '@/data/adminApi';
 import { AdminUser } from '@/types';
 import {
   Plus,
@@ -20,19 +21,22 @@ import {
   Mail,
   UserPlus,
   X,
+  Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const AdminManagementPage = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [admins, setAdmins] = useState<AdminUser[]>(mockAdmins);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<AdminUser | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
-    username: '',
+    name: '',
     email: '',
     role: 'admin' as 'admin' | 'superadmin',
     password: '',
@@ -57,58 +61,102 @@ const AdminManagementPage = () => {
     admin.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddAdmin = (e: React.FormEvent) => {
+  const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+      setError('Passwords do not match');
       return;
     }
 
-    const newAdmin: AdminUser = {
-      id: Date.now().toString(),
-      username: formData.username,
-      email: formData.email,
-      role: formData.role,
-      createdAt: new Date().toISOString(),
-      isActive: true,
-    };
+    if (!token) {
+      setError('Authentication required');
+      return;
+    }
 
-    setAdmins([...admins, newAdmin]);
-    setShowAddModal(false);
-    setFormData({
-      username: '',
-      email: '',
-      role: 'admin',
-      password: '',
-      confirmPassword: '',
-    });
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const response = await createAdmin(token, {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (response.success && response.admin) {
+        const newAdmin: AdminUser = {
+          id: response.admin.id,
+          username: response.admin.name,
+          email: response.admin.email,
+          role: response.admin.role,
+          createdAt: new Date().toISOString(),
+          isActive: true,
+        };
+
+        setAdmins([...admins, newAdmin]);
+        setShowAddModal(false);
+        setFormData({
+          name: '',
+          email: '',
+          role: 'admin',
+          password: '',
+          confirmPassword: '',
+        });
+      } else {
+        setError(response.message || 'Failed to create admin');
+      }
+    } catch (error) {
+      console.error('Create admin error:', error);
+      setError('Failed to create admin. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleEditAdmin = (e: React.FormEvent) => {
+  const handleEditAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAdmin) return;
+    if (!selectedAdmin || !token) return;
 
-    const updatedAdmins = admins.map(admin =>
-      admin.id === selectedAdmin.id
-        ? {
-            ...admin,
-            username: formData.username,
-            email: formData.email,
-            role: formData.role,
-          }
-        : admin
-    );
+    setIsSubmitting(true);
+    setError('');
 
-    setAdmins(updatedAdmins);
-    setShowEditModal(false);
-    setSelectedAdmin(null);
-    setFormData({
-      username: '',
-      email: '',
-      role: 'admin',
-      password: '',
-      confirmPassword: '',
-    });
+    try {
+      const response = await updateAdmin(token, selectedAdmin.id, {
+        name: formData.name,
+        email: formData.email,
+      });
+
+      if (response.success && response.admin) {
+        const updatedAdmins = admins.map(admin =>
+          admin.id === selectedAdmin.id
+            ? {
+                ...admin,
+                username: response.admin.name,
+                email: response.admin.email,
+                role: response.admin.role,
+              }
+            : admin
+        );
+
+        setAdmins(updatedAdmins);
+        setShowEditModal(false);
+        setSelectedAdmin(null);
+        setFormData({
+          name: '',
+          email: '',
+          role: 'admin',
+          password: '',
+          confirmPassword: '',
+        });
+      } else {
+        setError(response.message || 'Failed to update admin');
+      }
+    } catch (error) {
+      console.error('Update admin error:', error);
+      setError('Failed to update admin. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -123,7 +171,7 @@ const AdminManagementPage = () => {
     setShowPasswordModal(false);
     setSelectedAdmin(null);
     setFormData({
-      username: '',
+      name: '',
       email: '',
       role: 'admin',
       password: '',
@@ -158,8 +206,9 @@ const AdminManagementPage = () => {
 
   const openEditModal = (admin: AdminUser) => {
     setSelectedAdmin(admin);
+    setError('');
     setFormData({
-      username: admin.username,
+      name: admin.username,
       email: admin.email,
       role: admin.role,
       password: '',
@@ -170,8 +219,9 @@ const AdminManagementPage = () => {
 
   const openPasswordModal = (admin: AdminUser) => {
     setSelectedAdmin(admin);
+    setError('');
     setFormData({
-      username: '',
+      name: '',
       email: '',
       role: 'admin',
       password: '',
@@ -352,16 +402,23 @@ const AdminManagementPage = () => {
               </div>
 
               <form onSubmit={handleAddAdmin} className="space-y-4">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Username
+                    Name
                   </label>
                   <input
                     type="text"
                     required
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   />
                 </div>
 
@@ -374,7 +431,8 @@ const AdminManagementPage = () => {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   />
                 </div>
 
@@ -385,7 +443,8 @@ const AdminManagementPage = () => {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'superadmin' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   >
                     <option value="admin">Admin</option>
                     <option value="superadmin">Superadmin</option>
@@ -401,7 +460,8 @@ const AdminManagementPage = () => {
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   />
                 </div>
 
@@ -414,16 +474,25 @@ const AdminManagementPage = () => {
                     required
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   />
                 </div>
 
                 <div className="flex items-center space-x-3 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
-                    Add Admin
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Add Admin'
+                    )}
                   </button>
                   <button
                     type="button"
@@ -453,16 +522,23 @@ const AdminManagementPage = () => {
               </div>
 
               <form onSubmit={handleEditAdmin} className="space-y-4">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Username
+                    Name
                   </label>
                   <input
                     type="text"
                     required
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   />
                 </div>
 
@@ -475,7 +551,8 @@ const AdminManagementPage = () => {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   />
                 </div>
 
@@ -486,7 +563,8 @@ const AdminManagementPage = () => {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'superadmin' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                   >
                     <option value="admin">Admin</option>
                     <option value="superadmin">Superadmin</option>
@@ -496,9 +574,17 @@ const AdminManagementPage = () => {
                 <div className="flex items-center space-x-3 pt-4">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
-                    Update Admin
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      'Update Admin'
+                    )}
                   </button>
                   <button
                     type="button"

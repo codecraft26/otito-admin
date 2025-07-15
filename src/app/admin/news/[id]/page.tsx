@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockNewsItems, mockAdmins } from '@/data/mockData';
+import { getArticles, lockArticle, unlockArticle, publishArticle } from '@/data/adminApi';
 import { NewsItem } from '@/types';
 import {
   ArrowLeft,
@@ -26,55 +26,168 @@ import {
   Tag,
   Calendar,
   Globe,
+  Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 
 const NewsDetailPage = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const params = useParams();
   const router = useRouter();
   const [newsItem, setNewsItem] = useState<NewsItem | null>(null);
-  const [isLocked, setIsLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const id = params.id as string;
-    const item = mockNewsItems.find(news => news.id === id);
-    if (item) {
-      setNewsItem(item);
-      setIsLocked(!!item.lockedBy);
-      
-      // Simulate locking the item for current user
-      if (!item.lockedBy) {
-        // Mock API call to lock the item
-        console.log('Locking item for user:', user?.id);
-        setIsLocked(true);
-      }
-    }
-  }, [params.id, user?.id]);
+    loadArticle();
+  }, [params.id, token]);
 
-  const handlePublish = () => {
-    if (!newsItem) return;
-    // Mock publish functionality
-    console.log('Publishing news item:', newsItem.id);
-    setNewsItem({
-      ...newsItem,
-      isPublished: true,
-      publishedAt: new Date().toISOString()
-    });
+  const loadArticle = async () => {
+    if (!token) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const id = params.id as string;
+      // Get the specific article - we'll need to search by ID
+      const response = await getArticles(token, { page: 1, limit: 100 });
+      const article = response.articles?.find((item: any) => 
+        item._id === id || item.id === id || item.articleId === id
+      );
+      
+      if (article) {
+        // Normalize the article data
+        const normalizedArticle: NewsItem = {
+          ...article,
+          id: article._id || article.id || article.articleId || '',
+          language: (article.language === 'EN' ? 'english' : 'hindi') as 'english' | 'hindi',
+          twoLineSummary: article.twoLineDescription || article.twoLineSummary || '',
+          fourLineSummary: article.fourLineDescription || article.fourLineSummary || '',
+          swipeSummary: article.swipeDescription || article.swipeSummary || '',
+          fullDescription: article.content || article.fullDescription || '',
+          category: Array.isArray(article.category) ? article.category.join(', ') : article.category,
+          imageUrl: article.image_url || article.imageUrl,
+          sourceUrl: article.source || article.sourceUrl,
+        };
+        
+        setNewsItem(normalizedArticle);
+      } else {
+        setError('Article not found');
+      }
+    } catch (error) {
+      console.error('Load article error:', error);
+      setError('Failed to load article. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUnpublish = () => {
-    if (!newsItem) return;
-    // Mock unpublish functionality
-    console.log('Unpublishing news item:', newsItem.id);
-    setNewsItem({
-      ...newsItem,
-      isPublished: false,
-      publishedAt: undefined
-    });
+  const handlePublish = async () => {
+    if (!newsItem || !token) return;
+    
+    const articleId = newsItem._id || newsItem.id;
+    if (!articleId) {
+      setError('Article ID not found');
+      return;
+    }
+    
+    try {
+      const response = await publishArticle(token, articleId, true);
+      if (response.success) {
+        setNewsItem({
+          ...newsItem,
+          isPublished: true,
+          publishedAt: new Date().toISOString()
+        });
+      } else {
+        setError(response.message || 'Failed to publish article');
+      }
+    } catch (error) {
+      console.error('Publish error:', error);
+      setError('Failed to publish article. Please try again.');
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!newsItem || !token) return;
+    
+    const articleId = newsItem._id || newsItem.id;
+    if (!articleId) {
+      setError('Article ID not found');
+      return;
+    }
+    
+    try {
+      const response = await publishArticle(token, articleId, false);
+      if (response.success) {
+        setNewsItem({
+          ...newsItem,
+          isPublished: false,
+          publishedAt: undefined
+        });
+      } else {
+        setError(response.message || 'Failed to unpublish article');
+      }
+    } catch (error) {
+      console.error('Unpublish error:', error);
+      setError('Failed to unpublish article. Please try again.');
+    }
+  };
+
+  const handleLock = async () => {
+    if (!newsItem || !token) return;
+    
+    const articleId = newsItem._id || newsItem.id;
+    if (!articleId) {
+      setError('Article ID not found');
+      return;
+    }
+    
+    try {
+      const response = await lockArticle(token, articleId);
+      if (response.success) {
+        setNewsItem({
+          ...newsItem,
+          lockedBy: user?.id,
+          lockedAt: new Date().toISOString()
+        });
+      } else {
+        setError(response.message || 'Failed to lock article');
+      }
+    } catch (error) {
+      console.error('Lock error:', error);
+      setError('Failed to lock article. Please try again.');
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!newsItem || !token) return;
+    
+    const articleId = newsItem._id || newsItem.id;
+    if (!articleId) {
+      setError('Article ID not found');
+      return;
+    }
+    
+    try {
+      const response = await unlockArticle(token, articleId);
+      if (response.success) {
+        setNewsItem({
+          ...newsItem,
+          lockedBy: undefined,
+          lockedAt: undefined
+        });
+      } else {
+        setError(response.message || 'Failed to unlock article');
+      }
+    } catch (error) {
+      console.error('Unlock error:', error);
+      setError('Failed to unlock article. Please try again.');
+    }
   };
 
   const handleToggleHeadline = () => {
@@ -121,15 +234,34 @@ const NewsDetailPage = () => {
   };
 
   const getLockedByAdmin = (adminId: string) => {
-    return mockAdmins.find(admin => admin.id === adminId);
+    // For now, just return a placeholder since we don't have admin data
+    return { username: `Admin ${adminId}` };
   };
 
-  if (!newsItem) {
+  if (loading) {
     return (
       <AdminLayout>
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading news item...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading article...</p>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (error || !newsItem) {
+    return (
+      <AdminLayout>
+        <div className="text-center py-12">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Error</h3>
+          <p className="text-gray-600 mb-4">{error || 'Article not found'}</p>
+          <Link
+            href="/admin/news"
+            className="text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            ← Back to News List
+          </Link>
         </div>
       </AdminLayout>
     );
@@ -142,6 +274,24 @@ const NewsDetailPage = () => {
   return (
     <AdminLayout>
       <div className="space-y-6">
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2" />
+                {error}
+              </div>
+              <button
+                onClick={() => setError('')}
+                className="text-red-400 hover:text-red-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between">
@@ -342,6 +492,57 @@ const NewsDetailPage = () => {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Lock Management */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Lock Management</h3>
+              
+              {newsItem.lockedBy ? (
+                <div className="space-y-3">
+                  <div className="flex items-center p-3 bg-orange-50 rounded-lg">
+                    <Lock className="w-5 h-5 text-orange-600 mr-3" />
+                    <div>
+                      <p className="font-medium text-orange-800">
+                        {isLockedByCurrentUser ? 'Locked by you' : `Locked by ${lockedByAdmin?.username}`}
+                      </p>
+                      <p className="text-sm text-orange-600">
+                        Since {formatDate(newsItem.lockedAt!)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {isLockedByCurrentUser && (
+                    <button
+                      onClick={handleUnlock}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
+                    >
+                      <Unlock className="w-4 h-4 mr-2" />
+                      {loading ? 'Unlocking...' : 'Unlock Article'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center p-3 bg-green-50 rounded-lg">
+                    <Unlock className="w-5 h-5 text-green-600 mr-3" />
+                    <div>
+                      <p className="font-medium text-green-800">Available for editing</p>
+                      <p className="text-sm text-green-600">No active locks</p>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={handleLock}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    <Lock className="w-4 h-4 mr-2" />
+                    {loading ? 'Locking...' : 'Lock for Editing'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Article Info */}

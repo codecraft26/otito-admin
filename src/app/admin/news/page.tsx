@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockNewsItems, mockAdmins } from '@/data/mockData';
-import { NewsItem } from '@/types';
+import { getArticles, publishArticle, lockArticle, unlockArticle, validateToken } from '@/data/adminApi';
+import { NewsItem, ArticlesResponse } from '@/types';
 import {
   Search,
   Filter,
@@ -21,26 +21,101 @@ import {
   CheckCircle,
   AlertCircle,
   User,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 
 const NewsListPage = () => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [activeTab, setActiveTab] = useState<'hindi' | 'english'>('english');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [showPublishedOnly, setShowPublishedOnly] = useState(false);
+  const [articles, setArticles] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalArticles: 0,
+    perPage: 10,
+  });
+
+  // Load articles when tab or filters change
+  useEffect(() => {
+    if (token) {
+      loadArticles();
+    }
+  }, [token, activeTab, showPublishedOnly, searchTerm]);
+
+  const loadArticles = async (page = 1) => {
+    console.log('loadArticles called - token present:', !!token);
+    console.log('Current user:', user ? user.email : 'no user');
+    console.log('Token from localStorage:', localStorage.getItem('admin-token') ? 'present' : 'missing');
+    console.log('User from localStorage:', localStorage.getItem('admin-user') ? 'present' : 'missing');
+    
+    if (!token) {
+      setError('Please login to view articles.');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const params: any = {
+        page,
+        limit: 10,
+        language: activeTab === 'english' ? 'EN' : 'HI',
+      };
+      
+      if (showPublishedOnly) {
+        params.isPublished = true;
+      }
+      
+      if (searchTerm.trim()) {
+        params.title = searchTerm.trim();
+      }
+      
+      const response: ArticlesResponse = await getArticles(token, params);
+      
+      if (response.articles) {
+        setArticles(response.articles);
+        setPagination({
+          currentPage: response.currentPage,
+          totalPages: response.totalPages,
+          totalArticles: response.totalArticles,
+          perPage: response.perPage,
+        });
+      }
+    } catch (error) {
+      console.error('Load articles error:', error);
+      setError('Failed to load articles. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredNews = useMemo(() => {
-    return mockNewsItems.filter(item => {
-      const matchesLanguage = item.language === activeTab;
-      const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           item.category.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesPublished = !showPublishedOnly || item.isPublished;
-      return matchesLanguage && matchesSearch && matchesPublished;
-    });
-  }, [activeTab, searchTerm, showPublishedOnly]);
+    return articles.map(item => ({
+      ...item,
+      id: item._id || item.id || item.articleId || '',
+      // Normalize language field for UI
+      language: (item.language === 'EN' ? 'english' : 'hindi') as 'english' | 'hindi',
+      // Normalize summary fields
+      twoLineSummary: item.twoLineDescription || item.twoLineSummary || '',
+      fourLineSummary: item.fourLineDescription || item.fourLineSummary || '',
+      swipeSummary: item.swipeDescription || item.swipeSummary || '',
+      fullDescription: item.content || item.fullDescription || '',
+      // Normalize category to string
+      category: Array.isArray(item.category) ? item.category.join(', ') : item.category,
+      // Normalize image URL
+      imageUrl: item.image_url || item.imageUrl,
+      sourceUrl: item.source || item.sourceUrl,
+    }));
+  }, [articles]);
 
   const handleSelectAll = () => {
     if (selectedItems.length === filteredNews.length) {
@@ -58,20 +133,57 @@ const NewsListPage = () => {
     );
   };
 
-  const handleBulkPublish = () => {
-    // Mock bulk publish functionality
-    console.log('Publishing items:', selectedItems);
-    setSelectedItems([]);
+  const handleBulkPublish = async () => {
+    if (!token || selectedItems.length === 0) return;
+    
+    setLoading(true);
+    try {
+      await Promise.all(
+        selectedItems.map(itemId => publishArticle(token, itemId, true))
+      );
+      setSelectedItems([]);
+      loadArticles(pagination.currentPage);
+    } catch (error) {
+      console.error('Bulk publish error:', error);
+      setError('Failed to publish articles. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleBulkUnpublish = () => {
-    // Mock bulk unpublish functionality
-    console.log('Unpublishing items:', selectedItems);
-    setSelectedItems([]);
+  const handleBulkUnpublish = async () => {
+    if (!token || selectedItems.length === 0) return;
+    
+    setLoading(true);
+    try {
+      await Promise.all(
+        selectedItems.map(itemId => publishArticle(token, itemId, false))
+      );
+      setSelectedItems([]);
+      loadArticles(pagination.currentPage);
+    } catch (error) {
+      console.error('Bulk unpublish error:', error);
+      setError('Failed to unpublish articles. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTogglePublish = async (id: string, currentStatus: boolean) => {
+    if (!token) return;
+    
+    try {
+      await publishArticle(token, id, !currentStatus);
+      loadArticles(pagination.currentPage);
+    } catch (error) {
+      console.error('Toggle publish error:', error);
+      setError('Failed to update article status. Please try again.');
+    }
   };
 
   const getLockedByAdmin = (adminId: string) => {
-    return mockAdmins.find(admin => admin.id === adminId);
+    // This would need admin data - for now just return the ID
+    return { username: `Admin ${adminId}` };
   };
 
   const formatDate = (dateString: string) => {
@@ -106,6 +218,24 @@ const NewsListPage = () => {
             </div>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2" />
+                {error}
+              </div>
+              <button
+                onClick={() => setError('')}
+                className="text-red-400 hover:text-red-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Language Tabs */}
         <div className="bg-white rounded-lg shadow-sm">
@@ -161,32 +291,51 @@ const NewsListPage = () => {
                 </label>
               </div>
 
-              {/* Bulk Actions */}
-              {selectedItems.length > 0 && (
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">
-                    {selectedItems.length} selected
-                  </span>
-                  <button
-                    onClick={handleBulkPublish}
-                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                  >
-                    Publish
-                  </button>
-                  <button
-                    onClick={handleBulkUnpublish}
-                    className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 transition-colors"
-                  >
-                    Unpublish
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center space-x-2">
+                {/* Refresh Button */}
+                <button
+                  onClick={() => loadArticles(pagination.currentPage)}
+                  disabled={loading}
+                  className="flex items-center px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={clsx("w-4 h-4 mr-1", loading && "animate-spin")} />
+                  Refresh
+                </button>
+
+                {/* Bulk Actions */}
+                {selectedItems.length > 0 && (
+                  <>
+                    <span className="text-sm text-gray-600">
+                      {selectedItems.length} selected
+                    </span>
+                    <button
+                      onClick={handleBulkPublish}
+                      disabled={loading}
+                      className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Publishing...' : 'Publish'}
+                    </button>
+                    <button
+                      onClick={handleBulkUnpublish}
+                      disabled={loading}
+                      className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Unpublishing...' : 'Unpublish'}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
           {/* News List */}
           <div className="p-6">
-            {filteredNews.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-12">
+                <Loader2 className="mx-auto h-8 w-8 text-blue-600 animate-spin" />
+                <h3 className="mt-2 text-sm font-medium text-gray-900">Loading articles...</h3>
+              </div>
+            ) : filteredNews.length === 0 ? (
               <div className="text-center py-12">
                 <Globe className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-2 text-sm font-medium text-gray-900">No news found</h3>
@@ -305,17 +454,29 @@ const NewsListPage = () => {
                                 <Link
                                   href={`/admin/news/${item.id}`}
                                   className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                  title="View"
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Link>
                                 <Link
                                   href={`/admin/news/${item.id}/edit`}
                                   className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                  title="Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Link>
-                                <button className="p-1 text-gray-400 hover:text-red-600 transition-colors">
-                                  <Trash2 className="w-4 h-4" />
+                                <button 
+                                  onClick={() => handleTogglePublish(item.id, item.isPublished)}
+                                  disabled={loading}
+                                  className={clsx(
+                                    "p-1 transition-colors disabled:opacity-50",
+                                    item.isPublished 
+                                      ? "text-gray-400 hover:text-yellow-600" 
+                                      : "text-gray-400 hover:text-green-600"
+                                  )}
+                                  title={item.isPublished ? "Unpublish" : "Publish"}
+                                >
+                                  <Send className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
@@ -325,6 +486,56 @@ const NewsListPage = () => {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {!loading && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+                <div className="text-sm text-gray-700">
+                  Showing page {pagination.currentPage} of {pagination.totalPages} 
+                  ({pagination.totalArticles} total articles)
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => loadArticles(pagination.currentPage - 1)}
+                    disabled={pagination.currentPage <= 1 || loading}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  
+                  {/* Page Numbers */}
+                  {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                    const pageNum = Math.max(1, pagination.currentPage - 2) + i;
+                    if (pageNum <= pagination.totalPages) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => loadArticles(pageNum)}
+                          disabled={loading}
+                          className={clsx(
+                            "px-3 py-2 text-sm font-medium rounded-lg disabled:cursor-not-allowed",
+                            pageNum === pagination.currentPage
+                              ? "bg-blue-600 text-white"
+                              : "text-gray-700 bg-white border border-gray-300 hover:bg-gray-50"
+                          )}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    }
+                    return null;
+                  })}
+
+                  <button
+                    onClick={() => loadArticles(pagination.currentPage + 1)}
+                    disabled={pagination.currentPage >= pagination.totalPages || loading}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
           </div>

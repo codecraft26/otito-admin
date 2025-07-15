@@ -24,21 +24,59 @@ export async function validateToken(token: string) {
 // Manual token test function - call this from browser console
 
 export async function superadminLogin(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/api/superadmin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    
+    if (!res.ok) {
+      return { 
+        success: false, 
+        message: data.message || 'Invalid credentials',
+        status: res.status 
+      };
+    }
+    
+    return { ...data, success: true };
+  } catch (error) {
+    console.error('Superadmin login error:', error);
+    return { 
+      success: false, 
+      message: 'Network error. Please try again.',
+      error 
+    };
+  }
 }
 
 export async function adminLogin(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/api/admin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    
+    if (!res.ok) {
+      return { 
+        success: false, 
+        message: data.message || 'Invalid credentials',
+        status: res.status 
+      };
+    }
+    
+    return { ...data, success: true };
+  } catch (error) {
+    console.error('Admin login error:', error);
+    return { 
+      success: false, 
+      message: 'Network error. Please try again.',
+      error 
+    };
+  }
 }
 
 export async function createAdmin(token: string, data: { name: string; email: string; password: string }) {
@@ -355,3 +393,64 @@ export async function getAllAdmins(token: string) {
   }
   return res.json();
 } 
+
+// Configuration Management API Functions
+export async function getConfiguration(token: string) {
+  console.log('getConfiguration called with token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
+  
+  const url = `${API_BASE}/api/admin/config`;
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  
+  console.log('API Request:', { url, headers: { ...headers, Authorization: `Bearer ${token ? token.substring(0, 20) + '...' : 'NO TOKEN'}` } });
+  
+  const res = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+  
+  console.log('API Response:', res.status, res.statusText);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('getConfiguration error response:', errorText);
+    throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
+  }
+  
+  const data = await res.json();
+  console.log('getConfiguration response data:', data);
+  return data;
+}
+
+export async function updateConfiguration(token: string, data: Record<string, any>) {
+  console.log('updateConfiguration called with token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
+  console.log('updateConfiguration data:', data);
+  
+  const url = `${API_BASE}/api/admin/config/update`;
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
+  
+  console.log('API Request:', { url, headers: { ...headers, Authorization: `Bearer ${token ? token.substring(0, 20) + '...' : 'NO TOKEN'}` } });
+  
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data),
+  });
+  
+  console.log('API Response:', res.status, res.statusText);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('updateConfiguration error response:', errorText);
+    throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
+  }
+  
+  const responseData = await res.json();
+  console.log('updateConfiguration response data:', responseData);
+  return responseData;
+}

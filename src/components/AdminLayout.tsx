@@ -29,7 +29,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 admin-layout">
       <Sidebar />
       <div className="lg:ml-64">
         <main className="p-6">

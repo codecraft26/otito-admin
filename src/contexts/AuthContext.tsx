@@ -43,22 +43,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   // Accepts either username or email for login
-  const login = async (usernameOrEmail: string, password: string): Promise<boolean> => {
+  const login = async (usernameOrEmail: string, password: string): Promise<{ success: boolean; message?: string }> => {
     setIsLoading(true);
     try {
       // Determine if superadmin or admin login (simple heuristic: if contains '@', treat as email)
-      let response: LoginResponse;
+      let response: LoginResponse & { message?: string };
       if (usernameOrEmail.includes('@')) {
         // Try superadmin login first
         response = await superadminLogin(usernameOrEmail, password);
         if (!response.success) {
           // If not superadmin, try admin login
-          response = await adminLogin(usernameOrEmail, password);
+          const adminResponse = await adminLogin(usernameOrEmail, password);
+          if (!adminResponse.success) {
+            return { 
+              success: false, 
+              message: adminResponse.message || response.message || 'Invalid credentials' 
+            };
+          }
+          response = adminResponse;
         }
       } else {
         // Try admin login with username as email (for demo, fallback to admin login)
         response = await adminLogin(usernameOrEmail, password);
       }
+      
       if (response.success && response.token && response.admin) {
         
         // Normalize the user data to match our interface
@@ -75,12 +83,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setToken(response.token);
         localStorage.setItem('admin-user', JSON.stringify(normalizedUser));
         localStorage.setItem('admin-token', response.token);
-        return true;
+        return { success: true };
       }
-      return false;
+      
+      return { 
+        success: false, 
+        message: response.message || 'Invalid credentials' 
+      };
     } catch (error) {
       console.error('Login error:', error);
-      return false;
+      return { 
+        success: false, 
+        message: 'Network error. Please check your connection and try again.' 
+      };
     } finally {
       setIsLoading(false);
     }

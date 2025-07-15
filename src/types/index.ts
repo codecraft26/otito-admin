@@ -72,6 +72,54 @@ export interface SystemConfig {
   categories: string[];
 }
 
+// New Configuration API types based on API documentation
+export interface ConfigurationData {
+  _id: string;
+  ai: {
+    api_key: string;
+    end_point: string;
+  };
+  news: {
+    key: string;
+    end_point: string;
+    params: string;
+  };
+  country: string;
+  englishPrompt?: string;
+  hindiPrompt?: string;
+  language: 'en' | 'hi';
+  publish_state: boolean;
+  cron_interval: string;
+  auto_publish_mode: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConfigurationResponse {
+  success: boolean;
+  data: ConfigurationData;
+  message?: string;
+}
+
+export interface UpdateConfigurationRequest {
+  ai?: {
+    api_key?: string;
+    end_point?: string;
+  };
+  news?: {
+    key?: string;
+    end_point?: string;
+    params?: string;
+  };
+  country?: string;
+  englishPrompt?: string;
+  hindiPrompt?: string;
+  language?: 'en' | 'hi';
+  publish_state?: boolean;
+  cron_interval?: string;
+  auto_publish_mode?: boolean;
+}
+
 export interface SystemStats {
   totalAdmins: number;
   totalNews: number;
@@ -168,7 +216,7 @@ export interface AutoPublishToggleResponse {
 
 export interface AuthContextType {
   user: AdminUser | null;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   isLoading: boolean;
   token: string | null;

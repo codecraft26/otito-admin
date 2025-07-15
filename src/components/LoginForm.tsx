@@ -20,9 +20,14 @@ const LoginForm = () => {
       return;
     }
 
-    const success = await login(username, password);
-    if (!success) {
-      setError('Invalid username or password');
+    try {
+      const result = await login(username, password);
+      if (!result.success) {
+        setError(result.message || 'Invalid username or password');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('An unexpected error occurred. Please try again.');
     }
   };
 

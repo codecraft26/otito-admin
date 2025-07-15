@@ -9,13 +9,11 @@ import { SystemConfig } from '@/types';
 import {
   Save,
   Settings,
-  Globe,
   Clock,
   MessageSquare,
   Shield,
   AlertCircle,
   CheckCircle,
-  RefreshCw,
   Hash,
   ToggleLeft,
   ToggleRight,
@@ -102,7 +100,6 @@ const ConfigPage = () => {
         english_prompt: config.englishPrompt,
         auto_publish: config.autoPublish,
         max_news_per_batch: config.maxNewsPerBatch,
-        categories: config.categories,
       });
 
       if (response.success) {
@@ -118,23 +115,6 @@ const ConfigPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleAddCategory = () => {
-    const newCategory = prompt('Enter new category name:');
-    if (newCategory && !config.categories.includes(newCategory)) {
-      setConfig({
-        ...config,
-        categories: [...config.categories, newCategory]
-      });
-    }
-  };
-
-  const handleRemoveCategory = (categoryToRemove: string) => {
-    setConfig({
-      ...config,
-      categories: config.categories.filter(cat => cat !== categoryToRemove)
-    });
   };
 
   return (
@@ -309,94 +289,6 @@ const ConfigPage = () => {
                 <p className="text-xs text-gray-500 mt-1">
                   When enabled, processed news will be automatically published without admin approval
                 </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Categories Management */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <Globe className="w-5 h-5 text-purple-600 mr-2" />
-              <h2 className="text-lg font-semibold text-gray-900">News Categories</h2>
-            </div>
-            <button
-              onClick={handleAddCategory}
-              className="px-3 py-1 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Add Category
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {config.categories.map((category, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-              >
-                <span className="text-sm font-medium text-gray-900">{category}</span>
-                <button
-                  onClick={() => handleRemoveCategory(category)}
-                  className="text-red-500 hover:text-red-700 text-sm"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 mt-3">
-            These categories will be used to classify news articles automatically
-          </p>
-        </div>
-
-        {/* System Status */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center mb-4">
-            <AlertCircle className="w-5 h-5 text-orange-600 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">System Status</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center">
-                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-                <span className="text-sm font-medium text-green-800">NewsData.io API</span>
-              </div>
-              <p className="text-xs text-green-600 mt-1">Connected and operational</p>
-            </div>
-
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center">
-                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-                <span className="text-sm font-medium text-green-800">ChatGPT API</span>
-              </div>
-              <p className="text-xs text-green-600 mt-1">Connected and operational</p>
-            </div>
-
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center">
-                <RefreshCw className="w-5 h-5 text-blue-600 mr-2" />
-                <span className="text-sm font-medium text-blue-800">Cron Job</span>
-              </div>
-              <p className="text-xs text-blue-600 mt-1">
-                Next run: {new Date(Date.now() + config.newsFrequency * 60000).toLocaleTimeString()}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Configuration Summary */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start">
-            <AlertCircle className="w-5 h-5 text-blue-600 mr-3 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-medium text-blue-800">Configuration Summary</h3>
-              <div className="text-xs text-blue-700 mt-1 space-y-1">
-                <p>• News will be fetched every {config.newsFrequency} minutes</p>
-                <p>• Maximum {config.maxNewsPerBatch} articles per batch</p>
-                <p>• Auto-publish is {autoPublishMode ? 'enabled' : 'disabled'}</p>
-                <p>• {config.categories.length} categories configured</p>
               </div>
             </div>
           </div>

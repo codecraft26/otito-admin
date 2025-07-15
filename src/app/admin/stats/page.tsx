@@ -296,51 +296,73 @@ const StatsPage = () => {
           {/* Category Distribution */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">News by Category</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={stats.categoryDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ category, percentage }) => `${category} ${percentage}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="count"
-                >
-                  {stats.categoryDistribution.map((entry, index) => {
-                    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'];
-                    return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                  })}
-                </Pie>
-                <Tooltip formatter={(value, name) => [value, 'Articles']} />
-              </PieChart>
-            </ResponsiveContainer>
+            {stats.categoryDistribution && stats.categoryDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={stats.categoryDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={true}
+                    label={({ category, percentage }) => percentage > 5 ? `${category} ${percentage}%` : ''}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="count"
+                  >
+                    {stats.categoryDistribution.map((entry, index) => {
+                      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'];
+                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                    })}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [value, 'Articles']} />
+                  <Legend 
+                    formatter={(value) => value}
+                    wrapperStyle={{ fontSize: '12px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500">
+                <div className="text-center">
+                  <BarChart3 className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                  <p>No category data available</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Language Distribution */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Language Distribution</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={stats.languageDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ language, percentage }) => `${language} ${percentage}%`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="count"
-                >
-                  {stats.languageDistribution.map((entry, index) => {
-                    const colors = ['#3B82F6', '#F59E0B'];
-                    return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                  })}
-                </Pie>
-                <Tooltip formatter={(value, name) => [value, 'Articles']} />
-              </PieChart>
-            </ResponsiveContainer>
+            {stats.languageDistribution && stats.languageDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={stats.languageDistribution}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ language, percentage }) => `${language} ${percentage}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="count"
+                  >
+                    {stats.languageDistribution.map((entry, index) => {
+                      const colors = ['#3B82F6', '#F59E0B'];
+                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                    })}
+                  </Pie>
+                  <Tooltip formatter={(value, name) => [value, 'Articles']} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500">
+                <div className="text-center">
+                  <Globe className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                  <p>No language data available</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -421,34 +443,6 @@ const StatsPage = () => {
                   <p className="text-xs text-orange-600">Active Users</p>
                 </div>
                 <Users className="w-8 h-8 text-orange-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* System Health */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Health</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-center p-4 bg-green-50 rounded-lg">
-              <CheckCircle className="w-8 h-8 text-green-600 mr-3" />
-              <div>
-                <p className="font-medium text-green-800">API Status</p>
-                <p className="text-sm text-green-600 capitalize">{stats.systemHealth.apiStatus}</p>
-              </div>
-            </div>
-            <div className="flex items-center p-4 bg-blue-50 rounded-lg">
-              <Clock className="w-8 h-8 text-blue-600 mr-3" />
-              <div>
-                <p className="font-medium text-blue-800">Uptime</p>
-                <p className="text-sm text-blue-600">{stats.systemHealth.uptime}</p>
-              </div>
-            </div>
-            <div className="flex items-center p-4 bg-purple-50 rounded-lg">
-              <TrendingUp className="w-8 h-8 text-purple-600 mr-3" />
-              <div>
-                <p className="font-medium text-purple-800">Performance</p>
-                <p className="text-sm text-purple-600 capitalize">{stats.systemHealth.performance}</p>
               </div>
             </div>
           </div>

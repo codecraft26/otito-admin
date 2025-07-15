@@ -29,7 +29,6 @@ const CreateNewsPage = () => {
     fourLineSummary: '',
     swipeSummary: '',
     fullDescription: '',
-    originalDescription: '',
     category: '',
     tags: [] as string[],
     isHeadline: false,
@@ -275,18 +274,7 @@ const CreateNewsPage = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Original Description
-                </label>
-                <textarea
-                  rows={4}
-                  value={formData.originalDescription}
-                  onChange={(e) => setFormData({ ...formData, originalDescription: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  placeholder="Enter original description from source"
-                />
-              </div>
+
             </div>
           </div>
 

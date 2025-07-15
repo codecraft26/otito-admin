@@ -26,10 +26,12 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const NewsListPage = () => {
   const { user, token } = useAuth();
-  const [activeTab, setActiveTab] = useState<'hindi' | 'english'>('english');
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'english' | 'hindi' | 'locked'>('english');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [showPublishedOnly, setShowPublishedOnly] = useState(false);
@@ -42,6 +44,32 @@ const NewsListPage = () => {
     totalArticles: 0,
     perPage: 10,
   });
+  const [lockModal, setLockModal] = useState<{ open: boolean; lockedBy: string | null }>({ open: false, lockedBy: null });
+  const [lockingId, setLockingId] = useState<string | null>(null);
+  const [totalLockedCount, setTotalLockedCount] = useState(0);
+
+  // Load locked count across all languages
+  const loadLockedCount = async () => {
+    if (!token || !user?.id) return;
+    
+    try {
+      // Fetch a sample from both languages to count locked articles
+      const [englishResponse, hindiResponse] = await Promise.all([
+        getArticles(token, { page: 1, limit: 100, language: 'EN' }),
+        getArticles(token, { page: 1, limit: 100, language: 'HI' })
+      ]);
+
+      const allArticles = [
+        ...(englishResponse.articles || []),
+        ...(hindiResponse.articles || [])
+      ];
+
+      const lockedByUser = allArticles.filter(article => article.lockedBy === user.id);
+      setTotalLockedCount(lockedByUser.length);
+    } catch (error) {
+      console.error('Failed to load locked count:', error);
+    }
+  };
 
   // Load articles when tab or filters change
   useEffect(() => {
@@ -49,6 +77,25 @@ const NewsListPage = () => {
       loadArticles();
     }
   }, [token, activeTab, showPublishedOnly, searchTerm]);
+
+  // Load locked count when component mounts or user changes
+  useEffect(() => {
+    if (token && user?.id) {
+      loadLockedCount();
+    }
+  }, [token, user?.id]);
+
+  // Reload articles when user returns to this page (e.g., from edit page)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (token) {
+        loadArticles(pagination.currentPage);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [token, pagination.currentPage]);
 
   const loadArticles = async (page = 1) => {
     console.log('loadArticles called - token present:', !!token);
@@ -65,30 +112,81 @@ const NewsListPage = () => {
     setError('');
     
     try {
-      const params: any = {
-        page,
-        limit: 10,
-        language: activeTab === 'english' ? 'EN' : 'HI',
-      };
-      
-      if (showPublishedOnly) {
-        params.isPublished = true;
-      }
-      
-      if (searchTerm.trim()) {
-        params.title = searchTerm.trim();
-      }
-      
-      const response: ArticlesResponse = await getArticles(token, params);
-      
-      if (response.articles) {
-        setArticles(response.articles);
+      // Handle locked tab - fetch articles from both languages
+      if (activeTab === 'locked') {
+        // For locked tab, we need to fetch articles from both languages
+        // and then filter on the client side to show only locked articles
+        const englishParams: any = {
+          page: 1,
+          limit: 50, // Fetch more to ensure we get locked articles
+          language: 'EN',
+        };
+        
+        const hindiParams: any = {
+          page: 1,
+          limit: 50, // Fetch more to ensure we get locked articles
+          language: 'HI',
+        };
+
+        if (showPublishedOnly) {
+          englishParams.isPublished = true;
+          hindiParams.isPublished = true;
+        }
+        
+        if (searchTerm.trim()) {
+          englishParams.title = searchTerm.trim();
+          hindiParams.title = searchTerm.trim();
+        }
+
+        // Fetch both English and Hindi articles
+        const [englishResponse, hindiResponse] = await Promise.all([
+          getArticles(token, englishParams),
+          getArticles(token, hindiParams)
+        ]);
+
+        // Combine articles from both languages
+        const allArticles = [
+          ...(englishResponse.articles || []),
+          ...(hindiResponse.articles || [])
+        ];
+
+        // Filter to show only articles locked by current user
+        const lockedArticles = allArticles.filter(article => article.lockedBy === user?.id);
+
+        setArticles(lockedArticles);
         setPagination({
-          currentPage: response.currentPage,
-          totalPages: response.totalPages,
-          totalArticles: response.totalArticles,
-          perPage: response.perPage,
+          currentPage: 1,
+          totalPages: 1,
+          totalArticles: lockedArticles.length,
+          perPage: lockedArticles.length,
         });
+      } else {
+        // For language tabs, use the normal pagination
+        const params: any = {
+          page,
+          limit: 10,
+          language: activeTab === 'english' ? 'EN' : 'HI',
+        };
+        
+        if (showPublishedOnly) {
+          params.isPublished = true;
+        }
+        
+        if (searchTerm.trim()) {
+          params.title = searchTerm.trim();
+        }
+        
+        const response: ArticlesResponse = await getArticles(token, params);
+        
+        if (response.articles) {
+          setArticles(response.articles);
+          setPagination({
+            currentPage: response.currentPage,
+            totalPages: response.totalPages,
+            totalArticles: response.totalArticles,
+            perPage: response.perPage,
+          });
+        }
       }
     } catch (error) {
       console.error('Load articles error:', error);
@@ -99,7 +197,7 @@ const NewsListPage = () => {
   };
 
   const filteredNews = useMemo(() => {
-    return articles.map(item => ({
+    let filtered = articles.map(item => ({
       ...item,
       id: item._id || item.id || item.articleId || '',
       // Normalize language field for UI
@@ -115,6 +213,11 @@ const NewsListPage = () => {
       imageUrl: item.image_url || item.imageUrl,
       sourceUrl: item.source || item.sourceUrl,
     }));
+
+    // For locked tab, articles are already filtered in loadArticles function
+    // For other tabs, no additional filtering needed since API handles language filtering
+
+    return filtered;
   }, [articles]);
 
   const handleSelectAll = () => {
@@ -181,9 +284,50 @@ const NewsListPage = () => {
     }
   };
 
+  const handleEditClick = async (item: any) => {
+    if (!token) return;
+    setLockingId(item.id);
+    try {
+      const res = await lockArticle(token, item.id);
+      if (res.success) {
+        // Refresh locked count before navigating
+        loadLockedCount();
+        router.push(`/admin/news/${item.id}/edit`);
+      } else {
+        alert(res.message || 'Failed to lock article.');
+      }
+    } catch (err) {
+      alert('Failed to lock article.');
+    } finally {
+      setLockingId(null);
+    }
+  };
+
+  const handleUnlockClick = async (itemId: string) => {
+    if (!token) return;
+    setLockingId(itemId);
+    try {
+      const res = await unlockArticle(token, itemId);
+      if (res.success) {
+        // Reload articles to reflect the unlocked status
+        loadArticles(pagination.currentPage);
+        // Refresh locked count
+        loadLockedCount();
+      } else {
+        alert(res.message || 'Failed to unlock article.');
+      }
+    } catch (err) {
+      alert('Failed to unlock article.');
+    } finally {
+      setLockingId(null);
+    }
+  };
+
+  // Helper to display locked by info (username/email/raw)
   const getLockedByAdmin = (adminId: string) => {
-    // This would need admin data - for now just return the ID
-    return { username: `Admin ${adminId}` };
+    // If you have a list of admins, you could look up by ID here
+    // For now, just return a fallback object
+    return { username: `Admin ${adminId}`, email: undefined };
   };
 
   const formatDate = (dateString: string) => {
@@ -263,6 +407,23 @@ const NewsListPage = () => {
               >
                 Hindi News
               </button>
+              <button
+                onClick={() => setActiveTab('locked')}
+                className={clsx(
+                  'py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1',
+                  activeTab === 'locked'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                )}
+              >
+                <Lock className="w-4 h-4" />
+                <span>Locked by Me</span>
+                {totalLockedCount > 0 && (
+                  <span className="ml-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
+                    {totalLockedCount}
+                  </span>
+                )}
+              </button>
             </nav>
           </div>
 
@@ -337,11 +498,23 @@ const NewsListPage = () => {
               </div>
             ) : filteredNews.length === 0 ? (
               <div className="text-center py-12">
-                <Globe className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No news found</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Try adjusting your search or filters
-                </p>
+                {activeTab === 'locked' ? (
+                  <>
+                    <Lock className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No locked articles</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      You don't have any articles locked for editing
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No news found</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Try adjusting your search or filters
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -408,6 +581,17 @@ const NewsListPage = () => {
                                 <span className="px-2 py-1 bg-gray-100 rounded">
                                   {item.category}
                                 </span>
+                                {/* Show language indicator in locked tab */}
+                                {activeTab === 'locked' && (
+                                  <span className={clsx(
+                                    "px-2 py-1 rounded text-xs font-medium",
+                                    item.language === 'english' 
+                                      ? "bg-blue-100 text-blue-800" 
+                                      : "bg-green-100 text-green-800"
+                                  )}>
+                                    {item.language === 'english' ? 'EN' : 'HI'}
+                                  </span>
+                                )}
                                 {item.isHeadline && (
                                   <span className="flex items-center text-yellow-600">
                                     <Star className="w-3 h-3 mr-1" />
@@ -421,10 +605,12 @@ const NewsListPage = () => {
                             <div className="flex items-center space-x-2 ml-4">
                               {/* Lock Status */}
                               {isLocked && (
-                                <div className="flex items-center space-x-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                                <div className="flex items-center space-x-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded" title={isLockedByCurrentUser ? 'You are editing this article' : `Locked by ${lockedByAdmin?.username || lockedByAdmin?.email || item.lockedBy}`}>
                                   <Lock className="w-3 h-3" />
                                   <span>
-                                    {isLockedByCurrentUser ? 'You' : lockedByAdmin?.username}
+                                    {isLockedByCurrentUser
+                                      ? 'Locked by You'
+                                      : `Locked by ${lockedByAdmin?.username || lockedByAdmin?.email || item.lockedBy}`}
                                   </span>
                                 </div>
                               )}
@@ -458,21 +644,57 @@ const NewsListPage = () => {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Link>
-                                <Link
-                                  href={`/admin/news/${item.id}/edit`}
-                                  className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                                  title="Edit"
+                                <button
+                                  onClick={() => handleEditClick(item)}
+                                  disabled={isLocked && !isLockedByCurrentUser || lockingId === item.id}
+                                  className={clsx(
+                                    'p-1 transition-colors',
+                                    isLocked && !isLockedByCurrentUser
+                                      ? 'text-gray-300 cursor-not-allowed'
+                                      : 'text-gray-400 hover:text-green-600',
+                                    lockingId === item.id && 'opacity-50 cursor-wait'
+                                  )}
+                                  title={isLocked && !isLockedByCurrentUser ? `Locked by ${lockedByAdmin?.username}` : 'Edit'}
                                 >
-                                  <Edit className="w-4 h-4" />
-                                </Link>
+                                  {lockingId === item.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Edit className="w-4 h-4" />
+                                  )}
+                                </button>
+                                {/* Show unlock button only in locked tab and only for articles locked by current user */}
+                                {activeTab === 'locked' && isLockedByCurrentUser && (
+                                  <button
+                                    onClick={() => handleUnlockClick(item.id)}
+                                    disabled={lockingId === item.id}
+                                    className={clsx(
+                                      'p-1 transition-colors text-gray-400 hover:text-orange-600',
+                                      lockingId === item.id && 'opacity-50 cursor-wait'
+                                    )}
+                                    title="Unlock Article"
+                                  >
+                                    {lockingId === item.id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Lock className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                )}
                                 <button 
-                                  onClick={() => handleTogglePublish(item.id, item.isPublished)}
+                                  onClick={() => {
+                                    if (item.lockedBy && item.lockedBy !== user?.id) {
+                                      setLockModal({ open: true, lockedBy: item.lockedBy });
+                                    } else {
+                                      handleTogglePublish(item.id, item.isPublished);
+                                    }
+                                  }}
                                   disabled={loading}
                                   className={clsx(
                                     "p-1 transition-colors disabled:opacity-50",
                                     item.isPublished 
                                       ? "text-gray-400 hover:text-yellow-600" 
-                                      : "text-gray-400 hover:text-green-600"
+                                      : "text-gray-400 hover:text-green-600",
+                                    (item.lockedBy && item.lockedBy !== user?.id) && 'cursor-not-allowed opacity-60'
                                   )}
                                   title={item.isPublished ? "Unpublish" : "Publish"}
                                 >
@@ -541,6 +763,28 @@ const NewsListPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Lock Modal */}
+      {lockModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm text-center">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Article Locked</h3>
+            <p className="text-gray-700 mb-4">
+              This article is currently locked by <span className="font-bold">{(() => {
+                const lockedByAdmin = lockModal.lockedBy ? getLockedByAdmin(lockModal.lockedBy) : null;
+                return lockedByAdmin?.username || lockedByAdmin?.email || lockModal.lockedBy;
+              })()}</span>.<br/>
+              You cannot publish or unpublish it until it is unlocked.
+            </p>
+            <button
+              onClick={() => setLockModal({ open: false, lockedBy: null })}
+              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 };

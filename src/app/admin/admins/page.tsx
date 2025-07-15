@@ -1,14 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockAdmins } from '@/data/mockData';
-import { createAdmin, updateAdmin } from '@/data/adminApi';
+import { createAdmin, deactivateAdmin, changeAdminRole, getAllAdmins } from '@/data/adminApi';
 import { AdminUser } from '@/types';
 import {
   Plus,
-  Edit,
   Trash2,
   Shield,
   User,
@@ -17,8 +15,6 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  Key,
-  Mail,
   UserPlus,
   X,
   Loader2,
@@ -27,12 +23,9 @@ import { clsx } from 'clsx';
 
 const AdminManagementPage = () => {
   const { user, token } = useAuth();
-  const [admins, setAdmins] = useState<AdminUser[]>(mockAdmins);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState<AdminUser | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -42,6 +35,38 @@ const AdminManagementPage = () => {
     password: '',
     confirmPassword: '',
   });
+
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      if (!token) return;
+      try {
+        const res = await getAllAdmins(token);
+        if (res.success && Array.isArray(res.admins)) {
+          // Normalize admin objects to always have username and email
+          const normalizedAdmins = res.admins.map((a: any) => {
+            // Try to get a valid id: id, _id, or fallback to email (if unique)
+            let id = a.id || a._id || a.email || '';
+            if (!id) {
+              // As a last resort, use username
+              id = a.username || a.name || Math.random().toString(36).substr(2, 9);
+            }
+            return {
+              ...a,
+              id,
+              username: a.username || a.name || '',
+              email: a.email || '',
+            };
+          });
+          setAdmins(normalizedAdmins);
+        } else {
+          setAdmins([]);
+        }
+      } catch (err) {
+        setAdmins([]);
+      }
+    };
+    fetchAdmins();
+  }, [token]);
 
   // Redirect if not superadmin
   if (user?.role !== 'superadmin') {
@@ -56,10 +81,17 @@ const AdminManagementPage = () => {
     );
   }
 
-  const filteredAdmins = admins.filter(admin =>
-    admin.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    admin.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Debug: log admins array
+  console.log('Admins:', admins);
+
+  const filteredAdmins = admins.filter(admin => {
+    const username = admin.username || '';
+    const email = admin.email || '';
+    return (
+      username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      email.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,121 +145,52 @@ const AdminManagementPage = () => {
     }
   };
 
-  const handleEditAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedAdmin || !token) return;
-
-    setIsSubmitting(true);
-    setError('');
-
-    try {
-      const response = await updateAdmin(token, selectedAdmin.id, {
-        name: formData.name,
-        email: formData.email,
-      });
-
-      if (response.success && response.admin) {
-        const updatedAdmins = admins.map(admin =>
-          admin.id === selectedAdmin.id
-            ? {
-                ...admin,
-                username: response.admin.name,
-                email: response.admin.email,
-                role: response.admin.role,
-              }
-            : admin
-        );
-
-        setAdmins(updatedAdmins);
-        setShowEditModal(false);
-        setSelectedAdmin(null);
-        setFormData({
-          name: '',
-          email: '',
-          role: 'admin',
-          password: '',
-          confirmPassword: '',
-        });
-      } else {
-        setError(response.message || 'Failed to update admin');
-      }
-    } catch (error) {
-      console.error('Update admin error:', error);
-      setError('Failed to update admin. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleChangePassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+  const handleDeleteAdmin = async (adminId: string) => {
+    if (!adminId) {
+      alert('Invalid admin ID');
       return;
     }
-
-    // Mock password change
-    console.log('Changing password for admin:', selectedAdmin?.id);
-    setShowPasswordModal(false);
-    setSelectedAdmin(null);
-    setFormData({
-      name: '',
-      email: '',
-      role: 'admin',
-      password: '',
-      confirmPassword: '',
-    });
-  };
-
-  const handleDeleteAdmin = (adminId: string) => {
     if (adminId === user?.id) {
       alert('You cannot delete your own account');
       return;
     }
-
-    if (confirm('Are you sure you want to delete this admin?')) {
-      setAdmins(admins.filter(admin => admin.id !== adminId));
+    if (!token) return;
+    if (!window.confirm('Are you sure you want to delete this admin?')) return;
+    try {
+      // Assuming backend supports DELETE /api/superadmin/admin/:id
+      const res = await fetch(`http://localhost:5001/api/superadmin/admin/${adminId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdmins(admins.filter(admin => admin.id !== adminId));
+        alert('Admin deleted successfully.');
+      } else {
+        alert(data.message || 'Failed to delete admin.');
+      }
+    } catch (err) {
+      alert('Failed to delete admin.');
     }
   };
 
-  const handleToggleStatus = (adminId: string) => {
-    if (adminId === user?.id) {
-      alert('You cannot deactivate your own account');
-      return;
+  const handleChangeRole = async (adminId: string, newRole: 'admin' | 'superadmin') => {
+    if (!token) return;
+    if (!window.confirm(`Are you sure you want to change this admin's role to ${newRole}?`)) return;
+    try {
+      const res = await changeAdminRole(token, adminId, newRole);
+      if (res.success) {
+        setAdmins(admins.map(a => a.id === adminId ? { ...a, role: newRole } : a));
+        alert('Admin role updated successfully.');
+      } else {
+        alert(res.message || 'Failed to update admin role.');
+      }
+    } catch (err) {
+      alert('Failed to update admin role.');
     }
-
-    const updatedAdmins = admins.map(admin =>
-      admin.id === adminId
-        ? { ...admin, isActive: !admin.isActive }
-        : admin
-    );
-    setAdmins(updatedAdmins);
-  };
-
-  const openEditModal = (admin: AdminUser) => {
-    setSelectedAdmin(admin);
-    setError('');
-    setFormData({
-      name: admin.username,
-      email: admin.email,
-      role: admin.role,
-      password: '',
-      confirmPassword: '',
-    });
-    setShowEditModal(true);
-  };
-
-  const openPasswordModal = (admin: AdminUser) => {
-    setSelectedAdmin(admin);
-    setError('');
-    setFormData({
-      name: '',
-      email: '',
-      role: 'admin',
-      password: '',
-      confirmPassword: '',
-    });
-    setShowPasswordModal(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -305,16 +268,6 @@ const AdminManagementPage = () => {
                         <p className="text-sm text-gray-600">{admin.email}</p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <span className={clsx(
-                        'px-2 py-1 text-xs font-medium rounded-full',
-                        admin.isActive
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      )}>
-                        {admin.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
                   </div>
 
                   <div className="space-y-2 mb-4">
@@ -334,41 +287,23 @@ const AdminManagementPage = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => openEditModal(admin)}
-                      className="flex-1 flex items-center justify-center px-3 py-2 text-sm text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors"
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => openPasswordModal(admin)}
-                      className="flex-1 flex items-center justify-center px-3 py-2 text-sm text-green-600 border border-green-300 rounded hover:bg-green-50 transition-colors"
-                    >
-                      <Key className="w-4 h-4 mr-1" />
-                      Password
-                    </button>
-                    {admin.id !== user?.id && (
-                      <>
-                        <button
-                          onClick={() => handleToggleStatus(admin.id)}
-                          className={clsx(
-                            'px-3 py-2 text-sm rounded transition-colors',
-                            admin.isActive
-                              ? 'text-yellow-600 border border-yellow-300 hover:bg-yellow-50'
-                              : 'text-green-600 border border-green-300 hover:bg-green-50'
-                          )}
-                        >
-                          {admin.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAdmin(admin.id)}
-                          className="px-3 py-2 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
+                  <div className="flex flex-wrap gap-2 items-center pt-2">
+                    {/* Only show the toggle role button for superadmins */}
+                    {user?.role === 'superadmin' && admin.id !== user.id && (
+                      <button
+                        onClick={() => handleChangeRole(admin.id, admin.role === 'admin' ? 'superadmin' : 'admin')}
+                        className="min-w-[110px] flex-1 flex items-center justify-center px-3 py-2 text-sm text-purple-600 border border-purple-300 rounded hover:bg-purple-50 transition-colors"
+                      >
+                        {admin.role === 'admin' ? 'Make Superadmin' : 'Make Admin'}
+                      </button>
+                    )}
+                    {admin.id && admin.id !== user?.id && (
+                      <button
+                        onClick={() => handleDeleteAdmin(admin.id)}
+                        className="min-w-[110px] flex-1 px-3 py-2 text-sm text-red-600 border border-red-300 rounded hover:bg-red-50 transition-colors flex items-center justify-center"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
                 </div>
@@ -409,7 +344,7 @@ const AdminManagementPage = () => {
                 )}
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-black mb-1">
                     Name
                   </label>
                   <input
@@ -418,12 +353,12 @@ const AdminManagementPage = () => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-black"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-black mb-1">
                     Email
                   </label>
                   <input
@@ -432,19 +367,19 @@ const AdminManagementPage = () => {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-black"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-black mb-1">
                     Role
                   </label>
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'superadmin' })}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-black"
                   >
                     <option value="admin">Admin</option>
                     <option value="superadmin">Superadmin</option>
@@ -452,7 +387,7 @@ const AdminManagementPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-black mb-1">
                     Password
                   </label>
                   <input
@@ -461,12 +396,12 @@ const AdminManagementPage = () => {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-black"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-black mb-1">
                     Confirm Password
                   </label>
                   <input
@@ -475,7 +410,7 @@ const AdminManagementPage = () => {
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-black"
                   />
                 </div>
 
@@ -497,161 +432,6 @@ const AdminManagementPage = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Admin Modal */}
-        {showEditModal && selectedAdmin && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Edit Admin</h3>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleEditAdmin} className="space-y-4">
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                    {error}
-                  </div>
-                )}
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Role
-                  </label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'superadmin' })}
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="superadmin">Superadmin</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center space-x-3 pt-4">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      'Update Admin'
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowEditModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Change Password Modal */}
-        {showPasswordModal && selectedAdmin && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Change Password for {selectedAdmin.username}
-                </h3>
-                <button
-                  onClick={() => setShowPasswordModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleChangePassword} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    New Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="flex items-center space-x-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
-                  >
-                    Change Password
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswordModal(false)}
                     className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
                   >
                     Cancel

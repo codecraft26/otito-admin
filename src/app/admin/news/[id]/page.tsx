@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { getArticles, lockArticle, unlockArticle, publishArticle } from '@/data/adminApi';
+import { getArticles, getArticleById, lockArticle, unlockArticle, publishArticle } from '@/data/adminApi';
 import { NewsItem } from '@/types';
 import {
   ArrowLeft,
@@ -53,13 +53,14 @@ const NewsDetailPage = () => {
     
     try {
       const id = params.id as string;
-      // Get the specific article - we'll need to search by ID
-      const response = await getArticles(token, { page: 1, limit: 100 });
-      const article = response.articles?.find((item: any) => 
-        item._id === id || item.id === id || item.articleId === id
-      );
       
-      if (article) {
+      // Use getArticleById for direct access
+      const response = await getArticleById(token, id);
+      
+      if (response.success && (response.article || response.data)) {
+        // Handle both possible response structures
+        const article = response.article || response.data;
+        
         // Normalize the article data
         const normalizedArticle: NewsItem = {
           ...article,
@@ -70,13 +71,14 @@ const NewsDetailPage = () => {
           swipeSummary: article.swipeDescription || article.swipeSummary || '',
           fullDescription: article.content || article.fullDescription || '',
           category: Array.isArray(article.category) ? article.category.join(', ') : article.category,
+          tags: Array.isArray(article.tags) ? article.tags : [], // Ensure tags is always an array
           imageUrl: article.image_url || article.imageUrl,
           sourceUrl: article.source || article.sourceUrl,
         };
         
         setNewsItem(normalizedArticle);
       } else {
-        setError('Article not found');
+        setError(response.message || 'Article not found');
       }
     } catch (error) {
       console.error('Load article error:', error);
@@ -417,12 +419,9 @@ const NewsDetailPage = () => {
                   <p className="text-gray-700 leading-relaxed">{newsItem.fullDescription}</p>
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Original Description</h3>
-                  <p className="text-gray-600 text-sm leading-relaxed">{newsItem.originalDescription}</p>
-                </div>
 
-                {newsItem.tags.length > 0 && (
+
+                {newsItem.tags && newsItem.tags.length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">Tags</h3>
                     <div className="flex flex-wrap gap-2">

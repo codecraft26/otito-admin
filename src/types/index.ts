@@ -11,7 +11,6 @@ export interface NewsItem {
   swipeDescription?: string; // API field
   fullDescription?: string; // Legacy field
   content?: string; // API field
-  originalDescription?: string;
   category: string | string[]; // API returns array
   tags: string[];
   isHeadline: boolean;

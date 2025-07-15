@@ -1,7 +1,7 @@
 // src/data/adminApi.ts
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.otito.in";
-const LOCAL_API_BASE = process.env.NEXT_PUBLIC_LOCAL_API_BASE || "http://localhost:5001";
+const API_BASE ="http://localhost:5001";
+
 
 // Test token validity
 export async function validateToken(token: string) {
@@ -22,36 +22,6 @@ export async function validateToken(token: string) {
 }
 
 // Manual token test function - call this from browser console
-export async function testToken() {
-  const token = localStorage.getItem('admin-token');
-  if (!token) {
-    console.log('No token found in localStorage');
-    return;
-  }
-  
-  console.log('Testing token:', token.substring(0, 20) + '...');
-  
-  // Test 1: Validate token endpoint
-  console.log('\n=== Test 1: Token validation ===');
-  const validation = await validateToken(token);
-  console.log('Validation result:', validation);
-  
-  // Test 2: Articles endpoint
-  console.log('\n=== Test 2: Articles endpoint ===');
-  try {
-    const response = await fetch(`${LOCAL_API_BASE}/api/admin/articles?page=1&limit=5`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    console.log('Articles response status:', response.status);
-    const data = await response.json();
-    console.log('Articles response data:', data);
-  } catch (error) {
-    console.error('Articles test error:', error);
-  }
-}
 
 export async function superadminLogin(email: string, password: string) {
   const res = await fetch(`${API_BASE}/api/superadmin/login`, {
@@ -198,6 +168,33 @@ export async function getArticles(token: string, params: {
   return res.json();
 }
 
+export async function getArticleById(token: string, articleId: string) {
+  console.log('getArticleById called with:', { articleId, token: token ? `${token.substring(0, 20)}...` : 'NO TOKEN' });
+  
+  const url = `${API_BASE}/api/admin/article/${articleId}`;
+  console.log('Fetching from URL:', url);
+  
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  console.log('getArticleById response status:', res.status);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('getArticleById error response:', errorText);
+    throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
+  }
+  
+  const data = await res.json();
+  console.log('getArticleById response data:', data);
+  return data;
+}
+
 export async function lockArticle(token: string, articleId: string) {
   const res = await fetch(`${API_BASE}/api/admin/article/${articleId}/lock`, {
     method: 'POST',
@@ -218,8 +215,27 @@ export async function unlockArticle(token: string, articleId: string) {
   return res.json();
 }
 
+export async function checkLockStatus(token: string, articleId: string) {
+  const res = await fetch(`${API_BASE}/api/admin/article/${articleId}/lock-status`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return res.json();
+}
+
 export async function updateArticleContent(token: string, articleId: string, data: Record<string, any>) {
-  const res = await fetch(`${API_BASE}/api/admin/article/${articleId}`, {
+  console.log('updateArticleContent called with:', { 
+    articleId, 
+    token: token ? `${token.substring(0, 20)}...` : 'NO TOKEN',
+    data 
+  });
+  
+  const url = `${API_BASE}/api/admin/article/${articleId}`;
+  console.log('Updating article at URL:', url);
+  
+  const res = await fetch(url, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -227,7 +243,18 @@ export async function updateArticleContent(token: string, articleId: string, dat
     },
     body: JSON.stringify(data),
   });
-  return res.json();
+  
+  console.log('updateArticleContent response status:', res.status);
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('updateArticleContent error response:', errorText);
+    throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
+  }
+  
+  const responseData = await res.json();
+  console.log('updateArticleContent response data:', responseData);
+  return responseData;
 }
 
 export async function publishArticle(token: string, articleId: string, isPublished: boolean) {
@@ -290,5 +317,41 @@ export async function toggleAutoPublishMode(token: string, enabled: boolean) {
     throw new Error(`HTTP error! status: ${res.status}`);
   }
   
+  return res.json();
+} 
+
+export async function deactivateAdmin(token: string, id: string) {
+  const res = await fetch(`${API_BASE}/api/superadmin/admin/${id}/deactivate`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+  return res.json();
+}
+
+export async function changeAdminRole(token: string, id: string, role: 'admin' | 'superadmin') {
+  const res = await fetch(`${API_BASE}/api/superadmin/admin/${id}/role`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ role }),
+  });
+  return res.json();
+} 
+
+export async function getAllAdmins(token: string) {
+  const res = await fetch(`${API_BASE}/api/superadmin/admins`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP error! status: ${res.status}`);
+  }
   return res.json();
 } 

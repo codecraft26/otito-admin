@@ -38,7 +38,7 @@ export const mockNewsItems: NewsItem[] = [
     fourLineSummary: 'The government has announced a comprehensive economic policy aimed at boosting growth. The policy includes tax reforms and infrastructure investments. Economists predict a positive impact on GDP. Implementation begins next quarter.',
     swipeSummary: 'New economic policy announced with tax reforms and infrastructure focus',
     fullDescription: 'In a major announcement today, the government unveiled a comprehensive economic policy package designed to stimulate growth across multiple sectors. The policy includes significant tax reforms, infrastructure investments, and support for small businesses. Leading economists have praised the move, predicting it could boost GDP growth by 2-3% over the next two years. The implementation will begin in the next quarter with a phased rollout across different sectors.',
-    originalDescription: 'Government sources confirm major economic policy announcement scheduled for today...',
+
     category: 'Economy',
     tags: ['policy', 'economy', 'government', 'growth'],
     isHeadline: true,
@@ -57,7 +57,7 @@ export const mockNewsItems: NewsItem[] = [
     fourLineSummary: 'A leading technology company has announced a breakthrough in artificial intelligence. The new system can process complex data 10x faster than existing solutions. Applications include healthcare, finance, and research. Commercial release expected next year.',
     swipeSummary: 'AI breakthrough promises 10x faster processing for complex problems',
     fullDescription: 'A major technology corporation has unveiled what they claim is a revolutionary advancement in artificial intelligence processing. The new system, developed over three years, can handle complex computational problems at speeds 10 times faster than current market leaders. The technology has immediate applications in healthcare diagnostics, financial modeling, and scientific research. Beta testing begins next month with select partners, and commercial availability is expected by late next year.',
-    originalDescription: 'Tech industry sources report major AI announcement from leading company...',
+
     category: 'Technology',
     tags: ['AI', 'technology', 'breakthrough', 'innovation'],
     isHeadline: false,
@@ -77,7 +77,7 @@ export const mockNewsItems: NewsItem[] = [
     fourLineSummary: 'भारत की नई शिक्षा नीति का क्रियान्वयन शुरू हो गया है। इससे छात्रों को बेहतर अवसर मिलेंगे। तकनीकी और व्यावसायिक शिक्षा पर विशेष जोर दिया गया है। शिक्षा मंत्रालय ने सकारात्मक परिणामों की उम्मीद जताई है।',
     swipeSummary: 'नई शिक्षा नीति से तकनीकी शिक्षा को बढ़ावा',
     fullDescription: 'भारत की नई राष्ट्रीय शिक्षा नीति 2020 का देशभर में क्रियान्वयन शुरू हो गया है। इस नीति के तहत छात्रों को पारंपरिक शिक्षा के साथ-साथ तकनीकी और व्यावसायिक शिक्षा के बेहतर अवसर प्राप्त होंगे। शिक्षा मंत्रालय के अनुसार, यह नीति भारत को वैश्विक ज्ञान महाशक्ति बनाने में महत्वपूर्ण भूमिका निभाएगी। विशेषज्ञों का मानना है कि इससे छात्रों की रोजगार क्षमता में वृद्धि होगी।',
-    originalDescription: 'शिक्षा मंत्रालय के सूत्रों के अनुसार नई शिक्षा नीति का क्रियान्वयन...',
+
     category: 'Education',
     tags: ['शिक्षा', 'नीति', 'तकनीकी', 'छात्र'],
     isHeadline: true,
@@ -96,7 +96,7 @@ export const mockNewsItems: NewsItem[] = [
     fourLineSummary: 'एक भारतीय खिलाड़ी ने अंतर्राष्ट्रीय प्रतियोगिता में नया विश्व रिकॉर्ड स्थापित किया है। यह उपलब्धि भारतीय खेल के इतिहास में मील का पत्थर है। खेल मंत्रालय ने खिलाड़ी को बधाई दी है। इससे युवाओं को प्रेरणा मिलेगी।',
     swipeSummary: 'भारतीय खिलाड़ी का नया विश्व रिकॉर्ड',
     fullDescription: 'भारत के एक युवा खिलाड़ी ने अंतर्राष्ट्रीय चैंपियनशिप में नया विश्व रिकॉर्ड स्थापित करके देश का नाम रोशन किया है। यह उपलब्धि भारतीय खेल के इतिहास में एक महत्वपूर्ण मील का पत्थर है। खेल मंत्रालय और प्रधानमंत्री ने खिलाड़ी को बधाई दी है। इस सफलता से देश के युवाओं को खेल के क्षेत्र में आगे बढ़ने की प्रेरणा मिलेगी।',
-    originalDescription: 'खेल जगत के सूत्रों के अनुसार भारतीय खिलाड़ी की बड़ी उपलब्धि...',
+
     category: 'Sports',
     tags: ['खेल', 'रिकॉर्ड', 'भारत', 'गर्व'],
     isHeadline: false,

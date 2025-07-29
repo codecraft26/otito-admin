@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { getArticles, publishArticle, lockArticle, unlockArticle, validateToken, updateArticleContent } from '@/data/adminApi';
@@ -23,12 +23,13 @@ import {
   User,
   Loader2,
   RefreshCw,
+  Newspaper,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-const NewsListPage = () => {
+const NewsListPageContent = () => {
   const { user, token } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -42,6 +43,18 @@ const NewsListPage = () => {
   const [showPublishedOnly, setShowPublishedOnly] = useState(false);
   const [showHeadlineOnly, setShowHeadlineOnly] = useState(false);
   const [articles, setArticles] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalArticles: 0,
+    perPage: 10,
+  });
+  const [lockModal, setLockModal] = useState<{ open: boolean; lockedBy: string | null }>({ open: false, lockedBy: null });
+  const [lockingId, setLockingId] = useState<string | null>(null);
+  const [totalLockedCount, setTotalLockedCount] = useState(0);
+  const [totalHeadlineCount, setTotalHeadlineCount] = useState(0);
 
   // Get initial tab from URL or default to 'english'
   const getInitialTab = (): 'english' | 'hindi' | 'locked' => {
@@ -60,18 +73,6 @@ const NewsListPage = () => {
       showHeadlineOnly: searchParams.get('headline') === 'true',
     };
   };
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    totalPages: 1,
-    totalArticles: 0,
-    perPage: 10,
-  });
-  const [lockModal, setLockModal] = useState<{ open: boolean; lockedBy: string | null }>({ open: false, lockedBy: null });
-  const [lockingId, setLockingId] = useState<string | null>(null);
-  const [totalLockedCount, setTotalLockedCount] = useState(0);
-  const [totalHeadlineCount, setTotalHeadlineCount] = useState(0);
 
   // Calculate headline count from articles
   const calculateHeadlineCount = (articles: NewsItem[]) => {
@@ -561,7 +562,6 @@ const NewsListPage = () => {
                 Manage and publish news articles across different languages
               </p>
             </div>
-
           </div>
         </div>
 
@@ -729,10 +729,12 @@ const NewsListPage = () => {
                   </>
                 ) : (
                   <>
-                    <Globe className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No news found</h3>
+                    <Newspaper className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No articles found</h3>
                     <p className="mt-1 text-sm text-gray-500">
-                      Try adjusting your search or filters
+                      {searchTerm || showPublishedOnly || showHeadlineOnly
+                        ? 'Try adjusting your search or filters'
+                        : 'No articles available in this category'}
                     </p>
                   </>
                 )}
@@ -740,208 +742,200 @@ const NewsListPage = () => {
             ) : (
               <div className="space-y-4">
                 {/* Select All */}
-                <div className="flex items-center space-x-3 pb-2 border-b border-gray-200">
-                  <button
-                    onClick={handleSelectAll}
-                    className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900"
-                  >
-                    {selectedItems.length === filteredNews.length ? (
-                      <CheckSquare className="w-4 h-4" />
-                    ) : (
-                      <Square className="w-4 h-4" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.length === filteredNews.length && filteredNews.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-600">Select all</span>
+                    </label>
+                    {selectedItems.length > 0 && (
+                      <span className="text-sm text-gray-500">
+                        {selectedItems.length} of {filteredNews.length} selected
+                      </span>
                     )}
-                    <span>Select All</span>
-                  </button>
+                  </div>
                 </div>
 
-                {/* News Items */}
-                {filteredNews.map((item) => {
-                  const isSelected = selectedItems.includes(item.id);
-                  const lockedByAdmin = item.lockedBy ? getLockedByAdmin(item.lockedBy) : null;
-                  const isLockedByCurrentUser = item.lockedBy === user?.id;
-                  const isLocked = !!item.lockedBy;
+                {/* Articles List */}
+                <div className="space-y-4">
+                  {filteredNews.map((item) => {
+                    const isSelected = selectedItems.includes(item.id);
+                    const lockedByAdmin = item.lockedBy ? getLockedByAdmin(item.lockedBy) : null;
+                    const isLockedByCurrentUser = item.lockedBy === user?.id;
+                    const isLocked = !!item.lockedBy;
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={clsx(
-                        'border rounded-lg p-4 transition-all',
-                        isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      )}
-                    >
-                      <div className="flex items-start space-x-4">
-                        {/* Checkbox */}
-                        <button
-                          onClick={() => handleSelectItem(item.id)}
-                          className="mt-1"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-5 h-5 text-blue-600" />
-                          ) : (
-                            <Square className="w-5 h-5 text-gray-400" />
-                          )}
-                        </button>
+                    return (
+                      <div
+                        key={item.id}
+                        className={clsx(
+                          'bg-white border rounded-lg p-4 transition-colors',
+                          isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        )}
+                      >
+                        <div className="flex items-start space-x-4">
+                          {/* Checkbox */}
+                          <div className="flex-shrink-0 pt-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleSelectItem(item.id)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </div>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                                {item.title}
-                              </h3>
-                              <p className="text-sm text-gray-600 mb-3">
-                                {item.twoLineSummary}
-                              </p>
-                              
-                              {/* Metadata */}
-                              <div className="flex items-center space-x-4 text-xs text-gray-500">
-                                <span className="flex items-center">
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  {formatDate(item.createdAt)}
-                                </span>
-                                <span className="px-2 py-1 bg-gray-100 rounded">
-                                  {item.category}
-                                </span>
-                                {/* Show language indicator in locked tab */}
-                                {activeTab === 'locked' && (
-                                  <span className={clsx(
-                                    "px-2 py-1 rounded text-xs font-medium",
-                                    item.language === 'english' 
-                                      ? "bg-blue-100 text-blue-800" 
-                                      : "bg-green-100 text-green-800"
-                                  )}>
-                                    {item.language === 'english' ? 'EN' : 'HI'}
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <h3 className="text-lg font-medium text-gray-900 truncate">
+                                  {item.title}
+                                </h3>
+                                <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                                  {item.twoLineSummary}
+                                </p>
+                                
+                                <div className="flex items-center space-x-4 text-xs text-gray-500 mt-2">
+                                  <span className="flex items-center">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    {formatDate(item.createdAt)}
                                   </span>
-                                )}
-                                {item.isHeadline && (
-                                  <span className="flex items-center text-yellow-600">
-                                    <Star className="w-3 h-3 mr-1" />
-                                    Headline
+                                  <span className="px-2 py-1 bg-gray-100 rounded">
+                                    {item.category}
                                   </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Status and Actions */}
-                            <div className="flex items-center space-x-2 ml-4">
-                              {/* Lock Status */}
-                              {isLocked && (
-                                <div className="flex items-center space-x-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded" title={isLockedByCurrentUser ? 'You are editing this article' : `Locked by ${lockedByAdmin?.username || lockedByAdmin?.email || item.lockedBy}`}>
-                                  <Lock className="w-3 h-3" />
-                                  <span>
-                                    {isLockedByCurrentUser
-                                      ? 'Locked by You'
-                                      : `Locked by ${lockedByAdmin?.username || lockedByAdmin?.email || item.lockedBy}`}
-                                  </span>
+                                  {/* Show language indicator in locked tab */}
+                                  {activeTab === 'locked' && (
+                                    <span className={clsx(
+                                      "px-2 py-1 rounded text-xs font-medium",
+                                      item.language === 'english' 
+                                        ? "bg-blue-100 text-blue-800" 
+                                        : "bg-green-100 text-green-800"
+                                    )}>
+                                      {item.language === 'english' ? 'EN' : 'HI'}
+                                    </span>
+                                  )}
+                                  {item.isHeadline && (
+                                    <span className="flex items-center text-yellow-600">
+                                      <Star className="w-3 h-3 mr-1" />
+                                      Headline
+                                    </span>
+                                  )}
                                 </div>
-                              )}
-
-                              {/* Publish Status */}
-                              <div className={clsx(
-                                'flex items-center space-x-1 text-xs px-2 py-1 rounded',
-                                item.isPublished
-                                  ? 'text-green-600 bg-green-50'
-                                  : 'text-gray-600 bg-gray-50'
-                              )}>
-                                {item.isPublished ? (
-                                  <>
-                                    <CheckCircle className="w-3 h-3" />
-                                    <span>Published</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <AlertCircle className="w-3 h-3" />
-                                    <span>Unpublished</span>
-                                  </>
-                                )}
                               </div>
 
-                              {/* Actions */}
-                              <div className="flex items-center space-x-1">
-                                <Link
-                                  href={`/admin/news/${item.id}`}
-                                  className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                  title="View"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Link>
-                                <button
-                                  onClick={() => handleEditClick(item)}
-                                  disabled={isLocked && !isLockedByCurrentUser || lockingId === item.id}
-                                  className={clsx(
-                                    'p-1 transition-colors',
-                                    isLocked && !isLockedByCurrentUser
-                                      ? 'text-gray-300 cursor-not-allowed'
-                                      : 'text-gray-400 hover:text-green-600',
-                                    lockingId === item.id && 'opacity-50 cursor-wait'
-                                  )}
-                                  title={isLocked && !isLockedByCurrentUser ? `Locked by ${lockedByAdmin?.username}` : 'Edit'}
-                                >
-                                  {lockingId === item.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                              {/* Status and Actions */}
+                              <div className="flex items-center space-x-2 ml-4">
+                                {/* Lock Status */}
+                                {isLocked && (
+                                  <div className="flex items-center space-x-1 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded" title={isLockedByCurrentUser ? 'You are editing this article' : `Locked by ${lockedByAdmin?.username || lockedByAdmin?.email || item.lockedBy}`}>
+                                    <Lock className="w-3 h-3" />
+                                    <span>
+                                      {isLockedByCurrentUser
+                                        ? 'Locked by You'
+                                        : `Locked by ${lockedByAdmin?.username || lockedByAdmin?.email || item.lockedBy}`}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Publish Status */}
+                                <div className={clsx(
+                                  'flex items-center space-x-1 text-xs px-2 py-1 rounded',
+                                  item.isPublished
+                                    ? 'text-green-600 bg-green-50'
+                                    : 'text-gray-600 bg-gray-50'
+                                )}>
+                                  {item.isPublished ? (
+                                    <>
+                                      <CheckCircle className="w-3 h-3" />
+                                      <span>Published</span>
+                                    </>
                                   ) : (
-                                    <Edit className="w-4 h-4" />
+                                    <>
+                                      <AlertCircle className="w-3 h-3" />
+                                      <span>Draft</span>
+                                    </>
                                   )}
-                                </button>
-                                {/* Show unlock button only in locked tab and only for articles locked by current user */}
-                                {activeTab === 'locked' && isLockedByCurrentUser && (
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex items-center space-x-1">
+                                  <Link
+                                    href={`/admin/news/${item.id}`}
+                                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                    title="View"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Link>
                                   <button
-                                    onClick={() => handleUnlockClick(item.id)}
-                                    disabled={lockingId === item.id}
+                                    onClick={() => handleEditClick(item)}
+                                    disabled={isLocked && !isLockedByCurrentUser || lockingId === item.id}
                                     className={clsx(
-                                      'p-1 transition-colors text-gray-400 hover:text-orange-600',
-                                      lockingId === item.id && 'opacity-50 cursor-wait'
+                                      "p-1 transition-colors disabled:opacity-50",
+                                      isLocked && !isLockedByCurrentUser
+                                        ? "text-gray-300 cursor-not-allowed"
+                                        : "text-blue-400 hover:text-blue-600"
                                     )}
-                                    title="Unlock Article"
+                                    title={isLocked && !isLockedByCurrentUser ? "Article is locked by another user" : "Edit"}
                                   >
                                     {lockingId === item.id ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
                                     ) : (
-                                      <Lock className="w-4 h-4" />
+                                      <Edit className="w-4 h-4" />
                                     )}
                                   </button>
-                                )}
-                                <button 
-                                  onClick={() => {
-                                    if (item.lockedBy && item.lockedBy !== user?.id) {
-                                      setLockModal({ open: true, lockedBy: item.lockedBy });
-                                    } else {
-                                      handleTogglePublish(item.id, item.isPublished);
-                                    }
-                                  }}
-                                  disabled={loading}
-                                  className={clsx(
-                                    "p-1 transition-colors disabled:opacity-50",
-                                    item.isPublished 
-                                      ? "text-gray-400 hover:text-yellow-600" 
-                                      : "text-gray-400 hover:text-green-600",
-                                    (item.lockedBy && item.lockedBy !== user?.id) && 'cursor-not-allowed opacity-60'
+                                  {isLockedByCurrentUser && (
+                                    <button
+                                      onClick={() => handleUnlockClick(item.id)}
+                                      disabled={lockingId === item.id}
+                                      className="p-1 text-orange-400 hover:text-orange-600 transition-colors disabled:opacity-50"
+                                      title="Unlock"
+                                    >
+                                      {lockingId === item.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <Lock className="w-4 h-4" />
+                                      )}
+                                    </button>
                                   )}
-                                  title={item.isPublished ? "Unpublish" : "Publish"}
-                                >
-                                  <Send className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleToggleHeadline(item.id, item.isHeadline)}
-                                  disabled={loading}
-                                  className={clsx(
-                                    "p-1 transition-colors disabled:opacity-50",
-                                    item.isHeadline 
-                                      ? "text-yellow-500 hover:text-yellow-600" 
-                                      : "text-gray-400 hover:text-yellow-500"
-                                  )}
-                                  title={item.isHeadline ? "Remove Headline" : "Make Headline"}
-                                >
-                                  <Star className={clsx("w-4 h-4", item.isHeadline && "fill-current")} />
-                                </button>
+                                  <button
+                                    onClick={() => handleTogglePublish(item.id, item.isPublished)}
+                                    disabled={loading}
+                                    className={clsx(
+                                      "p-1 transition-colors disabled:opacity-50",
+                                      item.isPublished 
+                                        ? "text-green-500 hover:text-green-600" 
+                                        : "text-gray-400 hover:text-green-500"
+                                    )}
+                                    title={item.isPublished ? "Unpublish" : "Publish"}
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleHeadline(item.id, item.isHeadline)}
+                                    disabled={loading}
+                                    className={clsx(
+                                      "p-1 transition-colors disabled:opacity-50",
+                                      item.isHeadline 
+                                        ? "text-yellow-500 hover:text-yellow-600" 
+                                        : "text-gray-400 hover:text-yellow-500"
+                                    )}
+                                    title={item.isHeadline ? "Remove Headline" : "Make Headline"}
+                                  >
+                                    <Star className={clsx("w-4 h-4", item.isHeadline && "fill-current")} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -955,39 +949,18 @@ const NewsListPage = () => {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => loadArticles(pagination.currentPage - 1)}
-                    disabled={pagination.currentPage <= 1 || loading}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={pagination.currentPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
-                  
-                  {/* Page Numbers */}
-                  {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                    const pageNum = Math.max(1, pagination.currentPage - 2) + i;
-                    if (pageNum <= pagination.totalPages) {
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => loadArticles(pageNum)}
-                          disabled={loading}
-                          className={clsx(
-                            "px-3 py-2 text-sm font-medium rounded-lg disabled:cursor-not-allowed",
-                            pageNum === pagination.currentPage
-                              ? "bg-blue-600 text-white"
-                              : "text-gray-700 bg-white border border-gray-300 hover:bg-gray-50"
-                          )}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    }
-                    return null;
-                  })}
-
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
                   <button
                     onClick={() => loadArticles(pagination.currentPage + 1)}
-                    disabled={pagination.currentPage >= pagination.totalPages || loading}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={pagination.currentPage === pagination.totalPages}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
@@ -1020,6 +993,24 @@ const NewsListPage = () => {
         </div>
       )}
     </AdminLayout>
+  );
+};
+
+// Wrapper component with Suspense for useSearchParams
+const NewsListPage = () => {
+  return (
+    <Suspense fallback={
+      <AdminLayout>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-gray-600">Loading news page...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    }>
+      <NewsListPageContent />
+    </Suspense>
   );
 };
 

@@ -166,6 +166,7 @@ export async function getArticles(token: string, params: {
   page?: number;
   limit?: number;
   isPublished?: boolean;
+  isHeadline?: boolean;
   language?: string;
   category?: string;
   title?: string;

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { getArticles, getArticleById, lockArticle, unlockArticle, publishArticle } from '@/data/adminApi';
+import { getArticles, getArticleById, lockArticle, unlockArticle, publishArticle, updateArticleContent } from '@/data/adminApi';
 import { NewsItem } from '@/types';
 import {
   ArrowLeft,
@@ -192,14 +192,34 @@ const NewsDetailPage = () => {
     }
   };
 
-  const handleToggleHeadline = () => {
-    if (!newsItem) return;
-    // Mock toggle headline functionality
-    console.log('Toggling headline status:', newsItem.id);
-    setNewsItem({
-      ...newsItem,
-      isHeadline: !newsItem.isHeadline
-    });
+  const handleToggleHeadline = async () => {
+    if (!newsItem || !token) return;
+    
+    const articleId = newsItem._id || newsItem.id;
+    if (!articleId) {
+      setError('Article ID not found');
+      return;
+    }
+    
+    try {
+      const updateData = {
+        isHeadline: !newsItem.isHeadline
+      };
+
+      const response = await updateArticleContent(token, articleId, updateData);
+      
+      if (response.success) {
+        setNewsItem({
+          ...newsItem,
+          isHeadline: !newsItem.isHeadline
+        });
+      } else {
+        setError(response.message || 'Failed to update headline status');
+      }
+    } catch (error) {
+      console.error('Toggle headline error:', error);
+      setError('Failed to update headline status. Please try again.');
+    }
   };
 
   const handleShareTwitter = () => {

@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { getArticles, publishArticle, lockArticle, unlockArticle, validateToken } from '@/data/adminApi';
+import { getArticles, publishArticle, lockArticle, unlockArticle, validateToken, updateArticleContent } from '@/data/adminApi';
 import { NewsItem, ArticlesResponse } from '@/types';
 import {
   Search,
@@ -26,16 +26,40 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const NewsListPage = () => {
   const { user, token } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // URL-based state management to preserve tab and filter states across page refreshes
+  // This ensures users stay on the same tab and with the same filters when they refresh the page
+  
   const [activeTab, setActiveTab] = useState<'english' | 'hindi' | 'locked'>('english');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [showPublishedOnly, setShowPublishedOnly] = useState(false);
+  const [showHeadlineOnly, setShowHeadlineOnly] = useState(false);
   const [articles, setArticles] = useState<NewsItem[]>([]);
+
+  // Get initial tab from URL or default to 'english'
+  const getInitialTab = (): 'english' | 'hindi' | 'locked' => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'hindi' || tabParam === 'locked') {
+      return tabParam;
+    }
+    return 'english';
+  };
+
+  // Get initial filter states from URL
+  const getInitialFilters = () => {
+    return {
+      searchTerm: searchParams.get('search') || '',
+      showPublishedOnly: searchParams.get('published') === 'true',
+      showHeadlineOnly: searchParams.get('headline') === 'true',
+    };
+  };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pagination, setPagination] = useState({
@@ -47,6 +71,91 @@ const NewsListPage = () => {
   const [lockModal, setLockModal] = useState<{ open: boolean; lockedBy: string | null }>({ open: false, lockedBy: null });
   const [lockingId, setLockingId] = useState<string | null>(null);
   const [totalLockedCount, setTotalLockedCount] = useState(0);
+  const [totalHeadlineCount, setTotalHeadlineCount] = useState(0);
+
+  // Calculate headline count from articles
+  const calculateHeadlineCount = (articles: NewsItem[]) => {
+    return articles.filter(article => article.isHeadline).length;
+  };
+
+  // Load headline count across all languages
+  const loadHeadlineCount = async () => {
+    if (!token) return;
+    
+    try {
+      // Fetch articles from both languages to count headlines
+      const [englishResponse, hindiResponse] = await Promise.all([
+        getArticles(token, { page: 1, limit: 100, language: 'EN' }),
+        getArticles(token, { page: 1, limit: 100, language: 'HI' })
+      ]);
+
+      const allArticles = [
+        ...(englishResponse.articles || []),
+        ...(hindiResponse.articles || [])
+      ];
+
+      const headlineCount = calculateHeadlineCount(allArticles);
+      setTotalHeadlineCount(headlineCount);
+    } catch (error) {
+      console.error('Failed to load headline count:', error);
+    }
+  };
+
+  // Update URL when tab changes
+  const updateTabInURL = (tab: 'english' | 'hindi' | 'locked') => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'english') {
+      params.delete('tab'); // Remove tab param for default tab
+    } else {
+      params.set('tab', tab);
+    }
+    const newURL = `${window.location.pathname}?${params.toString()}`;
+    router.replace(newURL, { scroll: false });
+  };
+
+  // Handle tab change
+  const handleTabChange = (tab: 'english' | 'hindi' | 'locked') => {
+    setActiveTab(tab);
+    updateTabInURL(tab);
+  };
+
+  // Update URL with all current state
+  // URL structure: /admin/news?tab=hindi&search=test&published=true&headline=true
+  const updateURL = () => {
+    const params = new URLSearchParams();
+    
+    // Add tab (only if not default 'english' tab)
+    if (activeTab !== 'english') {
+      params.set('tab', activeTab);
+    }
+    
+    // Add filters (only if they are active)
+    if (searchTerm) {
+      params.set('search', searchTerm);
+    }
+    if (showPublishedOnly) {
+      params.set('published', 'true');
+    }
+    if (showHeadlineOnly) {
+      params.set('headline', 'true');
+    }
+    
+    const newURL = `${window.location.pathname}?${params.toString()}`;
+    router.replace(newURL, { scroll: false });
+  };
+
+  // Handle filter changes
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+  };
+
+  const handlePublishedFilterChange = (value: boolean) => {
+    setShowPublishedOnly(value);
+  };
+
+  const handleHeadlineFilterChange = (value: boolean) => {
+    setShowHeadlineOnly(value);
+  };
 
   // Load locked count across all languages
   const loadLockedCount = async () => {
@@ -71,12 +180,47 @@ const NewsListPage = () => {
     }
   };
 
+  // Initialize state from URL on component mount
+  useEffect(() => {
+    const currentTab = getInitialTab();
+    const currentFilters = getInitialFilters();
+    
+    setActiveTab(currentTab);
+    setSearchTerm(currentFilters.searchTerm);
+    setShowPublishedOnly(currentFilters.showPublishedOnly);
+    setShowHeadlineOnly(currentFilters.showHeadlineOnly);
+  }, []);
+
+  // Handle URL changes and sync with state
+  useEffect(() => {
+    const currentTab = getInitialTab();
+    const currentFilters = getInitialFilters();
+    
+    if (currentTab !== activeTab) {
+      setActiveTab(currentTab);
+    }
+    if (currentFilters.searchTerm !== searchTerm) {
+      setSearchTerm(currentFilters.searchTerm);
+    }
+    if (currentFilters.showPublishedOnly !== showPublishedOnly) {
+      setShowPublishedOnly(currentFilters.showPublishedOnly);
+    }
+    if (currentFilters.showHeadlineOnly !== showHeadlineOnly) {
+      setShowHeadlineOnly(currentFilters.showHeadlineOnly);
+    }
+  }, [searchParams]);
+
+  // Update URL when filters change
+  useEffect(() => {
+    updateURL();
+  }, [activeTab, searchTerm, showPublishedOnly, showHeadlineOnly]);
+
   // Load articles when tab or filters change
   useEffect(() => {
     if (token) {
       loadArticles();
     }
-  }, [token, activeTab, showPublishedOnly, searchTerm]);
+  }, [token, activeTab, showPublishedOnly, showHeadlineOnly, searchTerm]);
 
   // Load locked count when component mounts or user changes
   useEffect(() => {
@@ -84,6 +228,13 @@ const NewsListPage = () => {
       loadLockedCount();
     }
   }, [token, user?.id]);
+
+  // Load headline count when component mounts or articles change
+  useEffect(() => {
+    if (token) {
+      loadHeadlineCount();
+    }
+  }, [token]);
 
   // Reload articles when user returns to this page (e.g., from edit page)
   useEffect(() => {
@@ -133,6 +284,11 @@ const NewsListPage = () => {
           hindiParams.isPublished = true;
         }
         
+        if (showHeadlineOnly) {
+          englishParams.isHeadline = true;
+          hindiParams.isHeadline = true;
+        }
+        
         if (searchTerm.trim()) {
           englishParams.title = searchTerm.trim();
           hindiParams.title = searchTerm.trim();
@@ -160,6 +316,8 @@ const NewsListPage = () => {
           totalArticles: lockedArticles.length,
           perPage: lockedArticles.length,
         });
+        // Update headline count after loading locked articles
+        loadHeadlineCount();
       } else {
         // For language tabs, use the normal pagination
         const params: any = {
@@ -170,6 +328,10 @@ const NewsListPage = () => {
         
         if (showPublishedOnly) {
           params.isPublished = true;
+        }
+        
+        if (showHeadlineOnly) {
+          params.isHeadline = true;
         }
         
         if (searchTerm.trim()) {
@@ -186,6 +348,8 @@ const NewsListPage = () => {
             totalArticles: response.totalArticles,
             perPage: response.perPage,
           });
+          // Update headline count after loading articles
+          loadHeadlineCount();
         }
       }
     } catch (error) {
@@ -272,6 +436,33 @@ const NewsListPage = () => {
     }
   };
 
+  const handleBulkToggleHeadline = async () => {
+    if (!token || selectedItems.length === 0) return;
+    
+    setLoading(true);
+    try {
+      // Get current headline status of selected items
+      const selectedArticles = articles.filter(item => selectedItems.includes(item.id || ''));
+      const updatePromises = selectedArticles.map(article => {
+        const updateData = {
+          isHeadline: !article.isHeadline
+        };
+        return updateArticleContent(token, article.id || '', updateData);
+      });
+      
+      await Promise.all(updatePromises);
+      setSelectedItems([]);
+      loadArticles(pagination.currentPage);
+      // Update headline count after bulk operation
+      loadHeadlineCount();
+    } catch (error) {
+      console.error('Bulk headline toggle error:', error);
+      setError('Failed to update headline status for some articles. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleTogglePublish = async (id: string, currentStatus: boolean) => {
     if (!token) return;
     
@@ -281,6 +472,24 @@ const NewsListPage = () => {
     } catch (error) {
       console.error('Toggle publish error:', error);
       setError('Failed to update article status. Please try again.');
+    }
+  };
+
+  const handleToggleHeadline = async (id: string, currentStatus: boolean) => {
+    if (!token) return;
+    
+    try {
+      const updateData = {
+        isHeadline: !currentStatus
+      };
+      
+      await updateArticleContent(token, id, updateData);
+      loadArticles(pagination.currentPage);
+      // Update headline count after toggling
+      loadHeadlineCount();
+    } catch (error) {
+      console.error('Toggle headline error:', error);
+      setError('Failed to update headline status. Please try again.');
     }
   };
 
@@ -352,6 +561,7 @@ const NewsListPage = () => {
                 Manage and publish news articles across different languages
               </p>
             </div>
+
           </div>
         </div>
 
@@ -378,7 +588,7 @@ const NewsListPage = () => {
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6">
               <button
-                onClick={() => setActiveTab('english')}
+                onClick={() => handleTabChange('english')}
                 className={clsx(
                   'py-4 px-1 border-b-2 font-medium text-sm',
                   activeTab === 'english'
@@ -389,7 +599,7 @@ const NewsListPage = () => {
                 English News
               </button>
               <button
-                onClick={() => setActiveTab('hindi')}
+                onClick={() => handleTabChange('hindi')}
                 className={clsx(
                   'py-4 px-1 border-b-2 font-medium text-sm',
                   activeTab === 'hindi'
@@ -400,7 +610,7 @@ const NewsListPage = () => {
                 Hindi News
               </button>
               <button
-                onClick={() => setActiveTab('locked')}
+                onClick={() => handleTabChange('locked')}
                 className={clsx(
                   'py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-1',
                   activeTab === 'locked'
@@ -429,7 +639,7 @@ const NewsListPage = () => {
                     type="text"
                     placeholder="Search news..."
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -437,17 +647,29 @@ const NewsListPage = () => {
                   <input
                     type="checkbox"
                     checked={showPublishedOnly}
-                    onChange={(e) => setShowPublishedOnly(e.target.checked)}
+                    onChange={(e) => handlePublishedFilterChange(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="text-sm text-gray-600">Published only</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={showHeadlineOnly}
+                    onChange={(e) => handleHeadlineFilterChange(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-600">Headline only</span>
                 </label>
               </div>
 
               <div className="flex items-center space-x-2">
                 {/* Refresh Button */}
                 <button
-                  onClick={() => loadArticles(pagination.currentPage)}
+                  onClick={() => {
+                    loadArticles(pagination.currentPage);
+                    loadHeadlineCount();
+                  }}
                   disabled={loading}
                   className="flex items-center px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
@@ -474,6 +696,13 @@ const NewsListPage = () => {
                       className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? 'Unpublishing...' : 'Unpublish'}
+                    </button>
+                    <button
+                      onClick={handleBulkToggleHeadline}
+                      disabled={loading}
+                      className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Updating...' : 'Toggle Headlines'}
                     </button>
                   </>
                 )}
@@ -622,7 +851,7 @@ const NewsListPage = () => {
                                 ) : (
                                   <>
                                     <AlertCircle className="w-3 h-3" />
-                                    <span>Draft</span>
+                                    <span>Unpublished</span>
                                   </>
                                 )}
                               </div>
@@ -691,6 +920,19 @@ const NewsListPage = () => {
                                   title={item.isPublished ? "Unpublish" : "Publish"}
                                 >
                                   <Send className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleToggleHeadline(item.id, item.isHeadline)}
+                                  disabled={loading}
+                                  className={clsx(
+                                    "p-1 transition-colors disabled:opacity-50",
+                                    item.isHeadline 
+                                      ? "text-yellow-500 hover:text-yellow-600" 
+                                      : "text-gray-400 hover:text-yellow-500"
+                                  )}
+                                  title={item.isHeadline ? "Remove Headline" : "Make Headline"}
+                                >
+                                  <Star className={clsx("w-4 h-4", item.isHeadline && "fill-current")} />
                                 </button>
                               </div>
                             </div>

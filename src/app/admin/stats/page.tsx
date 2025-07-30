@@ -68,6 +68,29 @@ const StatsPage = () => {
     loadDashboardStats();
   }, [token]);
 
+  // Validate and clean pie chart data
+  const getValidCategoryData = () => {
+    if (!stats?.categoryDistribution || !Array.isArray(stats.categoryDistribution)) {
+      return [];
+    }
+    return stats.categoryDistribution.filter(item => 
+      item && typeof item === 'object' && 
+      typeof item.count === 'number' && 
+      typeof item.category === 'string'
+    );
+  };
+
+  const getValidLanguageData = () => {
+    if (!stats?.languageDistribution || !Array.isArray(stats.languageDistribution)) {
+      return [];
+    }
+    return stats.languageDistribution.filter(item => 
+      item && typeof item === 'object' && 
+      typeof item.count === 'number' && 
+      typeof item.language === 'string'
+    );
+  };
+
   if (loading) {
     return (
       <AdminLayout>
@@ -296,27 +319,37 @@ const StatsPage = () => {
           {/* Category Distribution */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">News by Category</h3>
-            {stats.categoryDistribution && stats.categoryDistribution.length > 0 ? (
+            {getValidCategoryData().length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={stats.categoryDistribution}
+                    data={getValidCategoryData()}
                     cx="50%"
                     cy="50%"
-                    labelLine={true}
-                    label={({ category, percentage }) => percentage > 5 ? `${category} ${percentage}%` : ''}
+                    labelLine={false}
+                    label={false}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="count"
                   >
-                    {stats.categoryDistribution.map((entry, index) => {
+                    {getValidCategoryData().map((entry, index) => {
                       const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'];
                       return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
                     })}
                   </Pie>
-                  <Tooltip formatter={(value, name) => [value, 'Articles']} />
+                  <Tooltip 
+                    formatter={(value, name, props) => {
+                      const data = props.payload as any;
+                      if (!data) return ['0 articles', 'Unknown'];
+                      return [`${data.count || 0} articles`, data.category || 'Unknown'];
+                    }}
+                  />
                   <Legend 
-                    formatter={(value) => value}
+                    formatter={(value, entry) => {
+                      const data = entry.payload as any;
+                      if (!data) return 'Unknown (0)';
+                      return `${data.category || 'Unknown'} (${data.count || 0})`;
+                    }}
                     wrapperStyle={{ fontSize: '12px' }}
                   />
                 </PieChart>
@@ -334,25 +367,39 @@ const StatsPage = () => {
           {/* Language Distribution */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Language Distribution</h3>
-            {stats.languageDistribution && stats.languageDistribution.length > 0 ? (
+            {getValidLanguageData().length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={stats.languageDistribution}
+                    data={getValidLanguageData()}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ language, percentage }) => `${language} ${percentage}%`}
+                    label={false}
                     outerRadius={100}
                     fill="#8884d8"
                     dataKey="count"
                   >
-                    {stats.languageDistribution.map((entry, index) => {
+                    {getValidLanguageData().map((entry, index) => {
                       const colors = ['#3B82F6', '#F59E0B'];
                       return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
                     })}
                   </Pie>
-                  <Tooltip formatter={(value, name) => [value, 'Articles']} />
+                  <Tooltip 
+                    formatter={(value, name, props) => {
+                      const data = props.payload as any;
+                      if (!data) return ['0 articles', 'Unknown'];
+                      return [`${data.count || 0} articles`, data.language || 'Unknown'];
+                    }}
+                  />
+                  <Legend 
+                    formatter={(value, entry) => {
+                      const data = entry.payload as any;
+                      if (!data) return 'Unknown (0)';
+                      return `${data.language || 'Unknown'} (${data.count || 0})`;
+                    }}
+                    wrapperStyle={{ fontSize: '12px' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

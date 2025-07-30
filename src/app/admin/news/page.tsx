@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, Suspense } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { getArticles, publishArticle, lockArticle, unlockArticle, validateToken, updateArticleContent } from '@/data/adminApi';
+import { getArticles, publishArticle, lockArticle, unlockArticle, validateToken, updateArticleContent, deleteArticle, bulkDeleteArticles } from '@/data/adminApi';
 import { NewsItem, ArticlesResponse } from '@/types';
 import {
   Search,
@@ -55,6 +55,7 @@ const NewsListPageContent = () => {
   const [lockingId, setLockingId] = useState<string | null>(null);
   const [totalLockedCount, setTotalLockedCount] = useState(0);
   const [totalHeadlineCount, setTotalHeadlineCount] = useState(0);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Get initial tab from URL or default to 'english'
   const getInitialTab = (): 'english' | 'hindi' | 'locked' => {
@@ -342,6 +343,15 @@ const NewsListPageContent = () => {
         const response: ArticlesResponse = await getArticles(token, params);
         
         if (response.articles) {
+          // Debug: Log the articles to check language filtering
+          console.log(`Loaded articles for ${activeTab} tab:`, response.articles.map(article => ({
+            id: article._id || article.id,
+            title: article.title,
+            language: article.language,
+            isHeadline: article.isHeadline,
+            isPublished: article.isPublished
+          })));
+          
           setArticles(response.articles);
           setPagination({
             currentPage: response.currentPage,
@@ -379,11 +389,16 @@ const NewsListPageContent = () => {
       sourceUrl: item.source || item.sourceUrl,
     }));
 
+    // Additional client-side filtering to ensure correct language articles are shown
+    if (activeTab === 'english') {
+      filtered = filtered.filter(item => item.language === 'english');
+    } else if (activeTab === 'hindi') {
+      filtered = filtered.filter(item => item.language === 'hindi');
+    }
     // For locked tab, articles are already filtered in loadArticles function
-    // For other tabs, no additional filtering needed since API handles language filtering
 
     return filtered;
-  }, [articles]);
+  }, [articles, activeTab]);
 
   const handleSelectAll = () => {
     if (selectedItems.length === filteredNews.length) {
@@ -530,6 +545,58 @@ const NewsListPageContent = () => {
       alert('Failed to unlock article.');
     } finally {
       setLockingId(null);
+    }
+  };
+
+  const handleDeleteArticle = async (id: string) => {
+    if (!token) return;
+    if (!window.confirm('Are you sure you want to delete this article? This action cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      await deleteArticle(token, id);
+      loadArticles(pagination.currentPage);
+      setSelectedItems((prev) => prev.filter((itemId) => itemId !== id));
+    } catch (error: any) {
+      setError(error.message || 'Failed to delete article.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!token || selectedItems.length === 0) return;
+    
+    const confirmMessage = `Are you sure you want to delete ${selectedItems.length} selected article${selectedItems.length > 1 ? 's' : ''}? This action cannot be undone.`;
+    if (!window.confirm(confirmMessage)) return;
+    
+    setLoading(true);
+    try {
+      const response = await bulkDeleteArticles(token, selectedItems);
+      
+      if (response.success) {
+        // Show success message with details
+        const { deletedCount, notFoundCount, errorCount } = response.data;
+        let message = `Successfully deleted ${deletedCount} article${deletedCount !== 1 ? 's' : ''}`;
+        if (notFoundCount > 0) {
+          message += `. ${notFoundCount} article${notFoundCount !== 1 ? 's' : ''} not found`;
+        }
+        if (errorCount > 0) {
+          message += `. ${errorCount} article${errorCount !== 1 ? 's' : ''} failed to delete`;
+        }
+        
+        // Clear selected items and reload articles
+        setSelectedItems([]);
+        loadArticles(pagination.currentPage);
+        
+        // Show success message (you might want to add a success state for this)
+        alert(message);
+      } else {
+        setError(response.message || 'Failed to delete articles');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to delete articles. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -703,6 +770,13 @@ const NewsListPageContent = () => {
                       className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading ? 'Updating...' : 'Toggle Headlines'}
+                    </button>
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={loading}
+                      className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Deleting...' : 'Delete Selected'}
                     </button>
                   </>
                 )}
@@ -927,6 +1001,17 @@ const NewsListPageContent = () => {
                                   >
                                     <Star className={clsx("w-4 h-4", item.isHeadline && "fill-current")} />
                                   </button>
+                                  <button
+                                    onClick={() => handleDeleteArticle(item.id)}
+                                    disabled={deletingId === item.id || loading}
+                                    className={clsx(
+                                      'p-1 transition-colors disabled:opacity-50',
+                                      'text-red-400 hover:text-red-600'
+                                    )}
+                                    title="Delete"
+                                  >
+                                    {deletingId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -950,17 +1035,17 @@ const NewsListPageContent = () => {
                   <button
                     onClick={() => loadArticles(pagination.currentPage - 1)}
                     disabled={pagination.currentPage === 1}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50 disabled:hover:border-blue-200 transition-colors"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-gray-600">
+                  <span className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg">
                     Page {pagination.currentPage} of {pagination.totalPages}
                   </span>
                   <button
                     onClick={() => loadArticles(pagination.currentPage + 1)}
                     disabled={pagination.currentPage === pagination.totalPages}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50 disabled:hover:border-blue-200 transition-colors"
                   >
                     Next
                   </button>

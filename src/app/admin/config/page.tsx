@@ -49,12 +49,7 @@ const ConfigPage = () => {
     setError('');
     
     try {
-      console.log('Loading configuration with token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
-      console.log('User role:', user?.role);
-      console.log('Token from localStorage:', localStorage.getItem('admin-token') ? 'present' : 'missing');
-      
       const response = await getConfiguration(token);
-      console.log('Configuration response:', response);
       
       if (response.success) {
         setConfig(response.data);
@@ -67,8 +62,6 @@ const ConfigPage = () => {
       // More detailed error handling
       if (error.message.includes('401')) {
         setError('Authentication failed. Please log in again.');
-        // Optionally, you can trigger a logout here
-        // logout();
       } else if (error.message.includes('403')) {
         setError('Access denied. This feature requires superadmin privileges.');
       } else if (error.message.includes('404')) {
@@ -123,8 +116,6 @@ const ConfigPage = () => {
         // Temporarily commenting out auto_publish_mode until we resolve the API issue
         // auto_publish_mode: config.auto_publish_mode,
       };
-
-      console.log('Sending configuration update:', updateData);
 
       const response = await updateConfiguration(token, updateData);
 
@@ -317,7 +308,7 @@ const ConfigPage = () => {
                 <div className="relative">
                   <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
-                    type="password"
+                    type="text"
                     value={config.ai.api_key}
                     onChange={(e) => updateConfigField('ai.api_key', e.target.value)}
                     className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
@@ -344,6 +335,22 @@ const ConfigPage = () => {
                   OpenAI API endpoint URL
                 </p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  OpenAI Organization ID
+                </label>
+                <input
+                  type="text"
+                  value={config.ai.org_id || ''}
+                  onChange={(e) => updateConfigField('ai.org_id', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+                  placeholder="org-your-organization-id"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional: OpenAI Organization ID for billing and usage tracking
+                </p>
+              </div>
             </div>
           </div>
 
@@ -362,7 +369,7 @@ const ConfigPage = () => {
                 <div className="relative">
                   <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
-                    type="password"
+                    type="text"
                     value={config.news.key}
                     onChange={(e) => updateConfigField('news.key', e.target.value)}
                     className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
@@ -514,33 +521,6 @@ const ConfigPage = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Publishing State
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    Enable or disable news publishing
-                  </p>
-                </div>
-                <button
-                  onClick={() => updateConfigField('publish_state', !config.publish_state)}
-                  className={clsx(
-                    'flex items-center px-4 py-2 rounded-lg border transition-colors',
-                    config.publish_state
-                      ? 'bg-green-50 border-green-200 text-green-700'
-                      : 'bg-gray-50 border-gray-200 text-gray-700'
-                  )}
-                >
-                  {config.publish_state ? (
-                    <ToggleRight className="w-5 h-5 mr-2" />
-                  ) : (
-                    <ToggleLeft className="w-5 h-5 mr-2" />
-                  )}
-                  {config.publish_state ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Auto-Publish Mode
                   </label>
                   <p className="text-xs text-gray-500">
@@ -570,7 +550,7 @@ const ConfigPage = () => {
 
         {/* Configuration Info */}
         <div className="bg-gray-50 rounded-lg p-4">
-          <div className="flex items-center text-sm text-gray-600 mb-2">
+          <div className="flex items-center text-sm text-gray-600">
             <AlertCircle className="w-4 h-4 mr-2" />
             <span>
               {config ? (
@@ -582,14 +562,6 @@ const ConfigPage = () => {
                 'No configuration data available'
               )}
             </span>
-          </div>
-          {/* Debug Information (remove in production) */}
-          <div className="text-xs text-gray-500 space-y-1">
-            <div>Token available: {token ? 'Yes' : 'No'}</div>
-            <div>User role: {user?.role || 'Unknown'}</div>
-            <div>User ID: {user?.id || 'Unknown'}</div>
-            <div>Token length: {token ? token.length : 0}</div>
-            <div>Token starts with: {token ? token.substring(0, 10) + '...' : 'N/A'}</div>
           </div>
         </div>
       </div>

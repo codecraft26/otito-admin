@@ -455,3 +455,36 @@ export async function updateConfiguration(token: string, data: Record<string, an
   console.log('updateConfiguration response data:', responseData);
   return responseData;
 }
+
+export async function deleteArticle(token: string, articleId: string) {
+  const url = `${API_BASE}/api/admin/article/${articleId}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to delete article: ${res.status} - ${errorText}`);
+  }
+  return res.json();
+}
+
+export async function bulkDeleteArticles(token: string, articleIds: string[]) {
+  const url = `${API_BASE}/api/admin/articles/bulk-delete`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ articleIds }),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to bulk delete articles: ${res.status} - ${errorText}`);
+  }
+  return res.json();
+}

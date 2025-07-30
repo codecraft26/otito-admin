@@ -78,6 +78,7 @@ export interface ConfigurationData {
   ai: {
     api_key: string;
     end_point: string;
+    org_id?: string;
   };
   news: {
     key: string;
@@ -105,6 +106,7 @@ export interface UpdateConfigurationRequest {
   ai?: {
     api_key?: string;
     end_point?: string;
+    org_id?: string;
   };
   news?: {
     key?: string;

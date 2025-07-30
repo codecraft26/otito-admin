@@ -1,6 +1,6 @@
 // src/data/adminApi.ts
 
-const API_BASE ="http://localhost:5001";
+const API_BASE ="https://api.otito.in";
 
 // Global error handler for token expiration
 let onTokenExpiration: (() => void) | null = null;

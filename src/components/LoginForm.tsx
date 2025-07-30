@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { Eye, EyeOff, Loader2, Newspaper } from 'lucide-react';
 
 const LoginForm = () => {
@@ -10,6 +11,7 @@ const LoginForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const { login, isLoading } = useAuth();
+  const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,11 +25,14 @@ const LoginForm = () => {
     try {
       const result = await login(username, password);
       if (!result.success) {
-        setError(result.message || 'Invalid username or password');
+        setError(result.message || 'Invalid email or password');
+        showToast('error', result.message || 'Invalid email or password', 5000);
       }
     } catch (error) {
       console.error('Login error:', error);
-      setError('An unexpected error occurred. Please try again.');
+      const errorMessage = 'An unexpected error occurred. Please try again.';
+      setError(errorMessage);
+      showToast('error', errorMessage, 5000);
     }
   };
 
@@ -116,16 +121,6 @@ const LoginForm = () => {
                 'Sign in'
               )}
             </button>
-          </div>
-
-          <div className="text-center">
-            <div className="text-sm text-gray-600">
-              Demo credentials:
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              <div>Superadmin: superadmin / password</div>
-              <div>Admin: admin1 / password</div>
-            </div>
           </div>
         </form>
       </div>

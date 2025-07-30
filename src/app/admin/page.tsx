@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { getDashboardStats } from '@/data/adminApi';
 import { DashboardStatsData } from '@/types';
 import { 
@@ -21,6 +22,7 @@ import {
 
 const AdminDashboard = () => {
   const { user, token } = useAuth();
+  const { showToast } = useToast();
   const [stats, setStats] = useState<DashboardStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,6 +46,17 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Test toast function
+  const testToast = (type: 'success' | 'error' | 'warning' | 'info') => {
+    const messages = {
+      success: 'This is a success message!',
+      error: 'This is an error message!',
+      warning: 'This is a warning message!',
+      info: 'This is an info message!'
+    };
+    showToast(type, messages[type], 4000);
   };
 
   useEffect(() => {
@@ -92,6 +105,37 @@ const AdminDashboard = () => {
                   <span className="font-medium">Manage News Articles</span>
                 </div>
               </a>
+              
+              {/* Test Toast Buttons */}
+              <div className="border-t pt-3 mt-3">
+                <p className="text-sm text-gray-600 mb-2">Test Toast Notifications:</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => testToast('success')}
+                    className="px-3 py-2 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200 transition-colors"
+                  >
+                    Success Toast
+                  </button>
+                  <button
+                    onClick={() => testToast('error')}
+                    className="px-3 py-2 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition-colors"
+                  >
+                    Error Toast
+                  </button>
+                  <button
+                    onClick={() => testToast('warning')}
+                    className="px-3 py-2 bg-yellow-100 text-yellow-700 rounded text-sm hover:bg-yellow-200 transition-colors"
+                  >
+                    Warning Toast
+                  </button>
+                  <button
+                    onClick={() => testToast('info')}
+                    className="px-3 py-2 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 transition-colors"
+                  >
+                    Info Toast
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

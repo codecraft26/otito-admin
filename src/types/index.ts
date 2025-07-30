@@ -222,6 +222,7 @@ export interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   token: string | null;
+  handleTokenExpiration: () => void;
 }
 
 export interface NewsLockInfo {

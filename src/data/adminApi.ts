@@ -1,7 +1,24 @@
 // src/data/adminApi.ts
 
-const API_BASE ="https://api.otito.in";
+const API_BASE ="http://localhost:5001";
 
+// Global error handler for token expiration
+let onTokenExpiration: (() => void) | null = null;
+
+export const setTokenExpirationHandler = (handler: () => void) => {
+  onTokenExpiration = handler;
+};
+
+const handleApiError = (response: Response, errorText: string) => {
+  if (response.status === 401) {
+    // Token expired or invalid
+    if (onTokenExpiration) {
+      onTokenExpiration();
+    }
+    throw new Error('Authentication failed. Please login again.');
+  }
+  throw new Error(errorText);
+};
 
 // Test token validity
 export async function validateToken(token: string) {
@@ -13,7 +30,6 @@ export async function validateToken(token: string) {
       },
     });
     const data = await res.json();
-    console.log('Token validation:', res.status, data);
     return { valid: res.ok, status: res.status, data };
   } catch (error) {
     console.error('Token validation error:', error);
@@ -184,27 +200,22 @@ export async function getArticles(token: string, params: {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
-  
-  console.log('API Request:', {
-    url,
-    headers,
-    token: token ? `${token.substring(0, 20)}...` : 'NO TOKEN'
-  });
-  
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
-  
-  console.log('API Response:', res.status, res.statusText);
-  
-  if (!res.ok) {
-    const errorData = await res.text();
-    console.log('Error response:', errorData);
-    throw new Error(`HTTP error! status: ${res.status} - ${errorData}`);
+
+  try {
+    const res = await fetch(url, { headers });
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      handleApiError(res, `Failed to fetch articles: ${res.status} - ${errorText}`);
+    }
+    
+    return res.json();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Authentication failed')) {
+      throw error;
+    }
+    throw new Error('Failed to fetch articles. Please try again.');
   }
-  
-  return res.json();
 }
 
 export async function getArticleById(token: string, articleId: string) {
@@ -397,32 +408,27 @@ export async function getAllAdmins(token: string) {
 
 // Configuration Management API Functions
 export async function getConfiguration(token: string) {
-  console.log('getConfiguration called with token:', token ? `${token.substring(0, 20)}...` : 'NO TOKEN');
-  
-  const url = `${API_BASE}/api/admin/config`;
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-  
-  console.log('API Request:', { url, headers: { ...headers, Authorization: `Bearer ${token ? token.substring(0, 20) + '...' : 'NO TOKEN'}` } });
-  
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
-  
-  console.log('API Response:', res.status, res.statusText);
-  
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error('getConfiguration error response:', errorText);
-    throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/config`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      handleApiError(res, `Failed to fetch configuration: ${res.status} - ${errorText}`);
+    }
+    
+    return res.json();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Authentication failed')) {
+      throw error;
+    }
+    throw new Error('Failed to fetch configuration. Please try again.');
   }
-  
-  const data = await res.json();
-  console.log('getConfiguration response data:', data);
-  return data;
 }
 
 export async function updateConfiguration(token: string, data: Record<string, any>) {

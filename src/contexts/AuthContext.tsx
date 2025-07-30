@@ -1,8 +1,10 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { AdminUser, AuthContextType, LoginResponse } from '@/types';
-import { adminLogin, superadminLogin } from '@/data/adminApi';
+import { adminLogin, superadminLogin, setTokenExpirationHandler } from '@/data/adminApi';
+import { useToast } from './ToastContext';
 
 const AuthContext = createContext<(AuthContextType & { token: string | null }) | undefined>(undefined);
 
@@ -22,25 +24,57 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const { showToast } = useToast();
 
+  // Handle token expiration
+  const handleTokenExpiration = () => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('admin-user');
+    localStorage.removeItem('admin-token');
+    showToast('warning', 'Your session has expired. Please login again.', 5000);
+    router.push('/');
+  };
+
+  // Check token validity on app start and when token changes
   useEffect(() => {
-    // Check if user is logged in on app start
-    const savedUser = localStorage.getItem('admin-user');
-    const savedToken = localStorage.getItem('admin-token');
-    
-    if (savedUser && savedToken) {
-      try {
-        const user = JSON.parse(savedUser);
-        setUser(user);
-        setToken(savedToken);
-      } catch (error) {
-        console.error('Error parsing saved user:', error);
-        localStorage.removeItem('admin-user');
-        localStorage.removeItem('admin-token');
+    // Set up token expiration handler for API calls
+    setTokenExpirationHandler(handleTokenExpiration);
+
+    const checkTokenValidity = async () => {
+      const savedUser = localStorage.getItem('admin-user');
+      const savedToken = localStorage.getItem('admin-token');
+      
+      if (savedUser && savedToken) {
+        try {
+          const user = JSON.parse(savedUser);
+          setUser(user);
+          setToken(savedToken);
+          
+          // Validate token with backend
+          const response = await fetch('http://localhost:5001/admin', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${savedToken}`,
+            },
+          });
+          
+          if (!response.ok) {
+            handleTokenExpiration();
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing saved user or validating token:', error);
+          handleTokenExpiration();
+          return;
+        }
       }
-    }
-    setIsLoading(false);
-  }, []);
+      setIsLoading(false);
+    };
+
+    checkTokenValidity();
+  }, [router]);
 
   // Accepts either username or email for login
   const login = async (usernameOrEmail: string, password: string): Promise<{ success: boolean; message?: string }> => {
@@ -57,7 +91,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           if (!adminResponse.success) {
             return { 
               success: false, 
-              message: adminResponse.message || response.message || 'Invalid credentials' 
+              message: adminResponse.message || response.message || 'Invalid email or password' 
             };
           }
           response = adminResponse;
@@ -83,12 +117,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setToken(response.token);
         localStorage.setItem('admin-user', JSON.stringify(normalizedUser));
         localStorage.setItem('admin-token', response.token);
+        
+        showToast('success', 'Login successful!', 3000);
         return { success: true };
       }
       
       return { 
         success: false, 
-        message: response.message || 'Invalid credentials' 
+        message: response.message || 'Invalid email or password' 
       };
     } catch (error) {
       console.error('Login error:', error);
@@ -106,6 +142,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setToken(null);
     localStorage.removeItem('admin-user');
     localStorage.removeItem('admin-token');
+    showToast('info', 'You have been logged out successfully.', 3000);
+    router.push('/');
   };
 
   const value: AuthContextType & { token: string | null } = {
@@ -114,6 +152,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     logout,
     isLoading,
     token,
+    handleTokenExpiration, // Export this for use in other components
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
